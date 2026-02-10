@@ -9,8 +9,11 @@
 <body>
   <header class="topbar">
     <div class="topbar__left">
-      <strong>Komponent-blanket</strong>
-      <span class="muted">— UX som skabelonen</span>
+      <img src="./assets/afi-logo.png" alt="Arla Foods Ingredients" class="topbar__logo" />
+      <div class="topbar__brand">
+        <strong>Komponent-blanket</strong>
+        <span class="muted">— UX som skabelonen</span>
+      </div>
     </div>
     <div class="topbar__actions">
       <button id="btnLogin" class="btn">Login</button>
@@ -70,67 +73,67 @@
 
         <div class="section">
           <div class="section__title">
-            <span class="secRange">01-29</span>
+            <span class="secRange">01 - 29</span>
             Håndventiler, luftstyrede ventiler, magnetventiler, reguleringsventiler, osv.
           </div>
           <div class="section__subtitle">(01) = Bundventil) (25 - 29 reguleringsventiler)</div>
-          <div class="grid grid--3rows" data-range="1-29"></div>
+          <div class="grid" data-range="1-29"></div>
         </div>
 
         <div class="section">
           <div class="section__title">
-            <span class="secRange">30-39</span>
+            <span class="secRange">30 - 39</span>
             Alt hvad der er påhæftet en motor
           </div>
-          <div class="grid grid--1row" data-range="30-39"></div>
+          <div class="grid" data-range="30-39"></div>
         </div>
 
         <div class="section">
           <div class="section__title">
-            <span class="secRange">40-49</span>
+            <span class="secRange">40 - 49</span>
             Flowmåler, vægtfylde, berthold, brix, pH, konduktivitet, flowswitch
           </div>
-          <div class="grid grid--1row" data-range="40-49"></div>
+          <div class="grid" data-range="40-49"></div>
         </div>
 
         <div class="section">
           <div class="section__title">
-            <span class="secRange">50-59</span>
+            <span class="secRange">50 - 59</span>
             Diverse, kontraventiler, manuelle trykreguleringsventiler
           </div>
-          <div class="grid grid--1row" data-range="50-59"></div>
+          <div class="grid" data-range="50-59"></div>
         </div>
 
         <div class="section">
           <div class="section__title">
-            <span class="secRange">60-69</span>
+            <span class="secRange">60 - 69</span>
             Temperatur, tryk
           </div>
-          <div class="grid grid--1row" data-range="60-69"></div>
+          <div class="grid" data-range="60-69"></div>
         </div>
 
         <div class="section">
           <div class="section__title">
-            <span class="secRange">70-79</span>
+            <span class="secRange">70 - 79</span>
             Niveautransmitter, kapacative elektroder, vægte, silopiloter, osv.
           </div>
-          <div class="grid grid--1row" data-range="70-79"></div>
+          <div class="grid" data-range="70-79"></div>
         </div>
 
         <div class="section">
           <div class="section__title">
-            <span class="secRange">80-89</span>
+            <span class="secRange">80 - 89</span>
             Aftaster (switch, induktive, o.s.v.)
           </div>
-          <div class="grid grid--1row" data-range="80-89"></div>
+          <div class="grid" data-range="80-89"></div>
         </div>
 
         <div class="section">
           <div class="section__title">
-            <span class="secRange">90-99</span>
+            <span class="secRange">90 - 99</span>
             Diverse, prøvehaner
           </div>
-          <div class="grid grid--1row" data-range="90-99"></div>
+          <div class="grid" data-range="90-99"></div>
         </div>
 
         <div class="footerNote">Revisions Information</div>
@@ -149,8 +152,7 @@
 
   <input id="importFile" type="file" accept="application/json" style="display:none" />
   <input id="scanFile" type="file" accept="image/*" style="display:none" />
-  
-  <!-- Login modal (lokal) -->
+
   <div id="loginModal" class="modal" aria-hidden="true">
     <div class="modal__backdrop" data-close="1"></div>
     <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
@@ -164,9 +166,9 @@
         <input id="loginInitials" class="input" placeholder="NIJEY" />
 
         <label class="modal__label">PIN (4-8 cifre)</label>
-<input id="loginPin" class="input" type="password" placeholder="••••" autocomplete="current-password" />
+        <input id="loginPin" class="input" type="password" placeholder="••••" autocomplete="current-password" />
 
-<div class="modal__footer">
+        <div class="modal__footer">
           <button class="btn btn--primary" id="btnLoginSave">Log ind</button>
           <button class="btn" id="btnLogout">Log ud</button>
         </div>
@@ -175,13 +177,11 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script>
-  // Cloudflare Worker API base URL (uden trailing slash).
-  // Eksempel: "https://komponent-backend.<dit_subdomain>.workers.dev"
-  // Tom streng = lokal offline-mode (localStorage)
-  window.COMPONENT_APP_API = "https://komponent-blanket-backend.komponent-database.workers.dev";
-</script>
 
-<script src="./app.js"></script>
+  <script>
+    window.COMPONENT_APP_API = "https://komponent-blanket-backend.komponent-database.workers.dev";
+  </script>
+
+  <script src="./app.js"></script>
 </body>
 </html>

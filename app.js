@@ -191,6 +191,18 @@ function buildGrid(gridEl){
   const {a,b} = parseRange(gridEl.dataset.range);
   gridEl.innerHTML = "";
 
+  // Special for 01-29:
+  // Originalen har 3 rækker:
+  //  01-09 (indrykket 1 "celle")
+  //  10-19
+  //  20-29
+  // Det løses ved 10 kolonner + én spacer før 01.
+  if(a === 1 && b === 29){
+    const spacer = document.createElement("div");
+    spacer.className = "gridSpacer";
+    gridEl.appendChild(spacer);
+  }
+
   for(let i=a;i<=b;i++){
     const wrap = document.createElement("label");
     wrap.className = "item";
@@ -199,10 +211,10 @@ function buildGrid(gridEl){
     cb.type = "checkbox";
     cb.className = "cb";
     cb.dataset.code = pad2(i);
+
     cb.addEventListener("change", () => {
       const user = getCurrentUser();
       if(!user){
-        // Revert and ask for login
         cb.checked = !cb.checked;
         requireLogin("Du skal være logget ind for at kunne sætte krydser.");
         return;
@@ -221,49 +233,33 @@ function buildGrid(gridEl){
         changeBuffer.push({ at: now, by: user.initials, action: "UNCHECK", code, source: "manual" });
       }
 
-updateSelectedCodes();
+      updateSelectedCodes();
 
-// Send audit til backend (ikke bloker UX)
-const mainNr = (fields.main.value || "").trim();
-logAudit({
-  action: cb.checked ? "CHECK" : "UNCHECK",
-  record_id: activeId,
-  hovednr: mainNr || null,
-  opsaetning: parseInt(code, 10),
-  tag: mainNr ? `${mainNr}.${code}` : null,
-  meta: { source: "manual" }
-});
+      // Audit (non-blocking)
+      const mainNr = (fields.main.value || "").trim();
+      logAudit({
+        action: cb.checked ? "CHECK" : "UNCHECK",
+        record_id: activeId,
+        hovednr: mainNr || null,
+        opsaetning: parseInt(code, 10),
+        tag: mainNr ? `${mainNr}.${code}` : null,
+        meta: { source: "manual" }
+      });
     });
 
     const code = document.createElement("span");
     code.className = "code";
     code.textContent = pad2(i);
 
+    // Checkbox til venstre, tal til højre (som originalen)
     wrap.appendChild(cb);
     wrap.appendChild(code);
+
     gridEl.appendChild(wrap);
   }
-
-  // Special layout tweak for 1-29 (to mimic the scan):
-  // We want 01-09, 10-19, 20-29 in three rows.
-  // Using CSS grid with 9 columns already approximates it; we nudge 10-29 into the next rows by inserting "spacers".
-  if(a === 1 && b === 29){
-    // Insert one spacer after 09 to start 10 on next row
-    // and one spacer after 19 to start 20 on next row.
-    // With 9 columns, adding 0..8 spacers can push next items.
-    // We add 0 here because 1-9 already fill the first row exactly.
-    // But browsers may pack; this keeps it consistent by forcing breaks:
-    const break1 = document.createElement("div");
-    break1.style.gridColumn = "1 / -1";
-    break1.style.height = "0";
-    gridEl.insertBefore(break1, gridEl.children[9]); // before 10
-
-    const break2 = document.createElement("div");
-    break2.style.gridColumn = "1 / -1";
-    break2.style.height = "0";
-    gridEl.insertBefore(break2, gridEl.children[20+1]); // before 20 (account for earlier break)
-  }
 }
+
+document.querySelectorAll(".grid").forEach(buildGrid);
 
 document.querySelectorAll(".grid").forEach(buildGrid);
 
