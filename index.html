@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Komponent-blanket (01–99)</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__left">
+      <strong>Komponent-blanket</strong>
+      <span class="muted">— UX som skabelonen</span>
+    </div>
+    <div class="topbar__actions">
+      <button id="btnLogin" class="btn">Login</button>
+      <span id="userBadge" class="userBadge">—</span>
+      <button id="btnAdminCreateUser" class="btn" style="display:none">Admin: Opret bruger</button>
+      <button id="btnNew" class="btn">Ny</button>
+      <button id="btnSave" class="btn btn--primary">Gem lokalt</button>
+      <button id="btnLoad" class="btn">Hent lokalt</button>
+      <button id="btnOCR" class="btn">OCR scan</button>
+      <button id="btnPrint" class="btn">Print / PDF</button>
+      <button id="btnImport" class="btn">Importér JSON</button>
+      <button id="btnExport" class="btn">Eksportér JSON</button>
+      <button id="btnExportExcel" class="btn">Eksportér Excel</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="sidebar">
+      <div class="sidebar__section">
+        <div class="sidebar__title">Poster</div>
+        <input id="search" class="input" placeholder="Søg (hovedkomponentnr, anlæg, pid...)" />
+        <div id="recordList" class="recordList"></div>
+        <div class="hint">
+          <div><strong>Tip:</strong> Gemte poster ligger i din browsers localStorage.</div>
+          <div>Hvis du vil dele data, brug <em>Eksportér JSON</em>.</div>
+        </div>
+      </div>
+    </aside>
+
+    <section class="paperWrap">
+      <div class="paper" id="paper">
+        <div class="headerFields">
+          <div class="fieldRow">
+            <label class="label">Hovedkomponentnr.</label>
+            <input id="fMain" class="field field--small" placeholder="0000" />
+          </div>
+          <div class="fieldRow">
+            <label class="label">Beskrivelse</label>
+            <input id="fDesc" class="field" />
+          </div>
+          <div class="fieldRow">
+            <label class="label">Anlæg</label>
+            <input id="fPlant" class="field" />
+          </div>
+          <div class="fieldRow">
+            <label class="label">PID Tegningsnr.</label>
+            <input id="fPid" class="field" />
+          </div>
+          <div class="fieldRow">
+            <label class="label">Signatur</label>
+            <div class="signature">
+              <input id="fSign1" class="field field--sig" />
+              <input id="fSign2" class="field field--sig" />
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section__title">
+            <span class="secRange">01-29</span>
+            Håndventiler, luftstyrede ventiler, magnetventiler, reguleringsventiler, osv.
+          </div>
+          <div class="section__subtitle">(01) = Bundventil) (25 - 29 reguleringsventiler)</div>
+          <div class="grid grid--3rows" data-range="1-29"></div>
+        </div>
+
+        <div class="section">
+          <div class="section__title">
+            <span class="secRange">30-39</span>
+            Alt hvad der er påhæftet en motor
+          </div>
+          <div class="grid grid--1row" data-range="30-39"></div>
+        </div>
+
+        <div class="section">
+          <div class="section__title">
+            <span class="secRange">40-49</span>
+            Flowmåler, vægtfylde, berthold, brix, pH, konduktivitet, flowswitch
+          </div>
+          <div class="grid grid--1row" data-range="40-49"></div>
+        </div>
+
+        <div class="section">
+          <div class="section__title">
+            <span class="secRange">50-59</span>
+            Diverse, kontraventiler, manuelle trykreguleringsventiler
+          </div>
+          <div class="grid grid--1row" data-range="50-59"></div>
+        </div>
+
+        <div class="section">
+          <div class="section__title">
+            <span class="secRange">60-69</span>
+            Temperatur, tryk
+          </div>
+          <div class="grid grid--1row" data-range="60-69"></div>
+        </div>
+
+        <div class="section">
+          <div class="section__title">
+            <span class="secRange">70-79</span>
+            Niveautransmitter, kapacative elektroder, vægte, silopiloter, osv.
+          </div>
+          <div class="grid grid--1row" data-range="70-79"></div>
+        </div>
+
+        <div class="section">
+          <div class="section__title">
+            <span class="secRange">80-89</span>
+            Aftaster (switch, induktive, o.s.v.)
+          </div>
+          <div class="grid grid--1row" data-range="80-89"></div>
+        </div>
+
+        <div class="section">
+          <div class="section__title">
+            <span class="secRange">90-99</span>
+            Diverse, prøvehaner
+          </div>
+          <div class="grid grid--1row" data-range="90-99"></div>
+        </div>
+
+        <div class="footerNote">Revisions Information</div>
+      </div>
+
+      <div class="statusbar">
+        <div class="legend">
+          <span class="legend__item"><span class="swatch swatch--manual"></span>Manuel</span>
+          <span class="legend__item"><span class="swatch swatch--scan"></span>Fra scan</span>
+        </div>
+        <div id="statusLeft" class="muted">Valgte felter: <span id="selectedCodes">—</span></div>
+        <div id="statusHint" class="muted">Klik for at sætte/fjerne kryds</div>
+      </div>
+    </section>
+  </main>
+
+  <input id="importFile" type="file" accept="application/json" style="display:none" />
+  <input id="scanFile" type="file" accept="image/*" style="display:none" />
+  
+  <!-- Login modal (lokal) -->
+  <div id="loginModal" class="modal" aria-hidden="true">
+    <div class="modal__backdrop" data-close="1"></div>
+    <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+      <div class="modal__header">
+        <div id="loginTitle" class="modal__title">Login</div>
+        <button class="btn" id="btnLoginClose">Luk</button>
+      </div>
+
+      <div class="modal__body">
+        <label class="modal__label">Initialer (fx NIJEY)</label>
+        <input id="loginInitials" class="input" placeholder="NIJEY" />
+
+        <label class="modal__label">PIN (4-8 cifre)</label>
+<input id="loginPin" class="input" type="password" placeholder="••••" autocomplete="current-password" />
+
+<div class="modal__footer">
+          <button class="btn btn--primary" id="btnLoginSave">Log ind</button>
+          <button class="btn" id="btnLogout">Log ud</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script>
+  // Cloudflare Worker API base URL (uden trailing slash).
+  // Eksempel: "https://komponent-backend.<dit_subdomain>.workers.dev"
+  // Tom streng = lokal offline-mode (localStorage)
+  window.COMPONENT_APP_API = "https://komponent-blanket-backend.komponent-database.workers.dev";
+</script>
+
+<script src="./app.js"></script>
+</body>
+</html>
