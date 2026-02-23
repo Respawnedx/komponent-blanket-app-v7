@@ -7,6 +7,43 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+
+function parseMainNumber(raw) {
+  const str = String(raw || "").trim();
+  if (!str) return "";
+  const m1 = str.match(/^\s*(\d{1,10})/);
+  if (m1) return m1[1];
+  const m2 = str.match(/\b(\d{1,10})\b/);
+  return m2 ? m2[1] : "";
+}
+
+function stripLeadingZeros(numStr) {
+  const t = String(numStr || "");
+  if (!t) return "";
+  const n = parseInt(t, 10);
+  if (!Number.isFinite(n)) return t.replace(/^0+(?=\d)/, "");
+  return String(n);
+}
+
+function validateSingleMainNumber(raw) {
+  const str = String(raw || "").trim();
+  if (!str) return { ok: false, message: "hovedkomponentnr required" };
+
+  // Only treat 4+ digit groups as 'main numbers' to avoid catching 01-99 / 101-199 etc.
+  const groups = [...str.matchAll(/\b\d{4,10}\b/g)].map(m => m[0]);
+  if (groups.length <= 1) return { ok: true, main: parseMainNumber(str) };
+
+  const first = stripLeadingZeros(groups[0]);
+  const others = groups.slice(1).map(stripLeadingZeros).filter(x => x && x !== first);
+  const uniq = [...new Set([first, ...others])];
+
+  if (uniq.length > 1) {
+    return { ok: false, message: `Multiple main numbers: ${uniq.join(", ")}` };
+  }
+  return { ok: true, main: parseMainNumber(str) };
+}
+
+
 function toHex(buf) {
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
 }
@@ -86,9 +123,21 @@ function parseAllowedOrigins(env) {
 }
 
 function corsHeaders(origin, allowed) {
-  const allowOrigin = allowed.includes(origin) ? origin : (allowed[0] || "*");
+  // More forgiving CORS for development + GitHub Pages.
+  // If ALLOWED_ORIGINS is set, we still allow the caller origin so local dev (localhost) works,
+  // while production can still pin it via your reverse-proxy / token security.
+  let allowOrigin = "*";
+  if (origin) {
+    if (allowed && allowed.length) {
+      if (allowed.includes("*") || allowed.includes(origin)) allowOrigin = allowed.includes("*") ? "*" : origin;
+      else allowOrigin = origin; // allow other origins (e.g., localhost dev)
+    } else {
+      allowOrigin = origin;
+    }
+  }
   return {
     "Access-Control-Allow-Origin": allowOrigin,
+    "Vary": "Origin",
     "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Max-Age": "86400",
@@ -311,7 +360,10 @@ export default {
       rec.editedBy = user.initials;
       rec.updatedAt = ts;
 
-      const hoved = String(rec.hovedkomponentnr || "");
+      const vMain = validateSingleMainNumber(rec.hovedkomponentnr);
+      if(!vMain.ok) return jsonResponse({ error: vMain.message || "Invalid hovedkomponentnr" }, origin, allowed, 400);
+      const hoved = String(vMain.main || "");
+      rec.hovedkomponentnr = hoved;
       const desc = String(rec.beskrivelse || "");
       const anlaeg = String(rec.anlaeg || "");
       const pid = String(rec.pid || "");
@@ -354,7 +406,7 @@ export default {
         action: existing ? "SAVE_EDIT" : "SAVE_CREATE",
         record_id: String(rec.id),
         hovednr: hoved || null,
-        meta: { selectedCount },
+        meta: { selectedCount, revision: (Array.isArray(rec.revisions) ? (rec.revisions.slice(-1)[0]?.desc || null) : null) },
       });
 
       return jsonResponse({ ok: true, record: rec }, origin, allowed);

@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Komponent-blanket (01–99)</title>
+  <title>Komponent-blanket</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <header class="topbar">
     <div class="topbar__left">
-      <img src="./assets/afi-logo.png" alt="Arla Foods Ingredients" class="topbar__logo" />
+      <img src="./assets/afi-logo.svg" alt="Arla Foods Ingredients" class="topbar__logo" />
       <div class="topbar__brand">
         <strong>Komponent-blanket</strong>
         <span class="muted">— UX som skabelonen</span>
@@ -34,7 +34,27 @@
     <aside class="sidebar">
       <div class="sidebar__section">
         <div class="sidebar__title">Poster</div>
-        <input id="search" class="input" placeholder="Søg (hovedkomponentnr, anlæg, pid...)" />
+        <input id="search" class="input" placeholder="Søg (hovedkomponentnr, tag, anlæg, PID...)" />
+
+        <div class="listTools">
+          <div class="listTools__row">
+            <button id="btnSelectAllVisible" class="btn btn--sm" type="button">Markér alle</button>
+            <button id="btnSelectNone" class="btn btn--sm" type="button">Nulstil</button>
+          </div>
+          <div class="listTools__row">
+            <button id="btnExportExcelSelected" class="btn btn--sm btn--primary" type="button">Eksportér Excel (valgte)</button>
+            <span id="selectedRecordCount" class="muted listTools__count">0 valgt</span>
+          </div>
+
+          
+          <div class="listTools__row">
+            <button id="btnPrintSelected" class="btn btn--sm" type="button">Print (valgte)</button>
+          </div>
+<div class="listTools__row">
+            <button id="btnImportExcelTags" class="btn btn--sm" type="button">Importér Excel (.xls)</button>
+          </div>
+        </div>
+
         <div id="recordList" class="recordList"></div>
         <div class="hint">
           <div><strong>Tip:</strong> Gemte poster ligger i din browsers localStorage.</div>
@@ -44,7 +64,8 @@
     </aside>
 
     <section class="paperWrap">
-      <div class="paper" id="paper">
+      <div class="paperRow">
+        <div class="paper" id="paper">
         <div class="headerFields">
           <div class="fieldRow">
             <label class="label">Hovedkomponentnr.</label>
@@ -71,86 +92,187 @@
           </div>
         </div>
 
-        <div class="section">
-          <div class="section__title">
-            <span class="secRange">01 - 29</span>
-            Håndventiler, luftstyrede ventiler, magnetventiler, reguleringsventiler, osv.
+        <div class="paperBody">
+          <div class="sectionsWrap">
+            <div class="section">
+              <div class="section__title">
+                <span class="secRange">01 - 29</span>
+                Håndventiler, luftstyrede ventiler, magnetventiler, reguleringsventiler, osv.
+              </div>
+              <div class="section__subtitle">(01) = Bundventil) (25 - 29 reguleringsventiler)</div>
+              <div class="grid" data-range="1-29"></div>
+            </div>
+
+            <div class="section">
+              <div class="section__title">
+                <span class="secRange">30 - 39</span>
+                Alt hvad der er påhæftet en motor
+              </div>
+              <div class="grid" data-range="30-39"></div>
+            </div>
+
+            <div class="section">
+              <div class="section__title">
+                <span class="secRange">40 - 49</span>
+                Flowmåler, vægtfylde, berthold, brix, pH, konduktivitet, flowswitch
+              </div>
+              <div class="grid" data-range="40-49"></div>
+            </div>
+
+            <div class="section">
+              <div class="section__title">
+                <span class="secRange">50 - 59</span>
+                Diverse, kontraventiler, manuelle trykreguleringsventiler
+              </div>
+              <div class="grid" data-range="50-59"></div>
+            </div>
+
+            <div class="section">
+              <div class="section__title">
+                <span class="secRange">60 - 69</span>
+                Temperatur, tryk
+              </div>
+              <div class="grid" data-range="60-69"></div>
+            </div>
+
+            <div class="section">
+              <div class="section__title">
+                <span class="secRange">70 - 79</span>
+                Niveautransmitter, kapacative elektroder, vægte, silopiloter, osv.
+              </div>
+              <div class="grid" data-range="70-79"></div>
+            </div>
+
+            <div class="section">
+              <div class="section__title">
+                <span class="secRange">80 - 89</span>
+                Aftaster (switch, induktive, o.s.v.)
+              </div>
+              <div class="grid" data-range="80-89"></div>
+            </div>
+
+            <div class="section">
+              <div class="section__title">
+                <span class="secRange">90 - 99</span>
+                Diverse, prøvehaner
+              </div>
+              <div class="grid" data-range="90-99"></div>
+            </div>
           </div>
-          <div class="section__subtitle">(01) = Bundventil) (25 - 29 reguleringsventiler)</div>
-          <div class="grid" data-range="1-29"></div>
+</div>
+
         </div>
 
-        <div class="section">
-          <div class="section__title">
-            <span class="secRange">30 - 39</span>
-            Alt hvad der er påhæftet en motor
-          </div>
-          <div class="grid" data-range="30-39"></div>
-        </div>
+        <aside class="revisionsDock" aria-label="Revisions information">
+          <div class="revisionsDock__title">Revisions information</div>
+          <div class="revisionsDock__sub muted">Dato · Initialer · Beskrivelse · Ændrede tags</div>
 
-        <div class="section">
-          <div class="section__title">
-            <span class="secRange">40 - 49</span>
-            Flowmåler, vægtfylde, berthold, brix, pH, konduktivitet, flowswitch
+          <div class="revisionsDock__last">
+            <div class="muted">Seneste ændring</div>
+            <div id="revLastSummary" class="revLastSummary">—</div>
+            <div id="revLastChanges" class="revLastChanges muted">—</div>
           </div>
-          <div class="grid" data-range="40-49"></div>
-        </div>
 
-        <div class="section">
-          <div class="section__title">
-            <span class="secRange">50 - 59</span>
-            Diverse, kontraventiler, manuelle trykreguleringsventiler
+          <div class="revisionsDock__tableWrap">
+            <table class="revTable" aria-label="Revisionshistorik">
+              <thead>
+                <tr>
+                  <th>Dato</th>
+                  <th>Init.</th>
+                  <th>Beskrivelse</th>
+                  <th>Ændrede tags</th>
+                </tr>
+              </thead>
+              <tbody id="revTbody">
+                <tr><td colspan="4" class="muted">Ingen ændringer endnu.</td></tr>
+              </tbody>
+            </table>
           </div>
-          <div class="grid" data-range="50-59"></div>
-        </div>
 
-        <div class="section">
-          <div class="section__title">
-            <span class="secRange">60 - 69</span>
-            Temperatur, tryk
-          </div>
-          <div class="grid" data-range="60-69"></div>
-        </div>
-
-        <div class="section">
-          <div class="section__title">
-            <span class="secRange">70 - 79</span>
-            Niveautransmitter, kapacative elektroder, vægte, silopiloter, osv.
-          </div>
-          <div class="grid" data-range="70-79"></div>
-        </div>
-
-        <div class="section">
-          <div class="section__title">
-            <span class="secRange">80 - 89</span>
-            Aftaster (switch, induktive, o.s.v.)
-          </div>
-          <div class="grid" data-range="80-89"></div>
-        </div>
-
-        <div class="section">
-          <div class="section__title">
-            <span class="secRange">90 - 99</span>
-            Diverse, prøvehaner
-          </div>
-          <div class="grid" data-range="90-99"></div>
-        </div>
-
-        <div class="footerNote">Revisions Information</div>
+          <div class="revisionsDock__hint muted">Tip: Ved <strong>Gem</strong> bliver du bedt om en kort beskrivelse (fx projektnr.).</div>
+        </aside>
       </div>
 
       <div class="statusbar">
-        <div class="legend">
-          <span class="legend__item"><span class="swatch swatch--manual"></span>Manuel</span>
-          <span class="legend__item"><span class="swatch swatch--scan"></span>Fra scan</span>
+        <div class="statusbar__left">
+          <div class="legend">
+            <span class="legend__item"><span class="swatch swatch--blue"></span>Blå</span>
+            <span class="legend__item"><span class="swatch swatch--red"></span>Rød</span>
+            <span class="legend__item"><span class="swatch swatch--scan"></span>Fra scan (grøn)</span>
+          </div>
+
+          <div class="controlBox" aria-label="Valg (markér/serie/PID/vis)">
+          <div class="toolbar">
+            <div class="toolgroup" id="markToolgroup">
+              <span class="toolLabel">Markér:</span>
+              <div class="seg" id="markSeg">
+                <button class="segBtn segBtn--active" data-mark="blue" type="button">Blå</button>
+                <button class="segBtn" data-mark="red" type="button">Rød</button>
+              </div>
+            </div>
+
+            <div class="toolgroup" id="seriesToolgroup">
+              <span class="toolLabel">Serie:</span>
+              <div class="seg" id="seriesSeg">
+                <button class="segBtn segBtn--active" data-series="0" type="button">0xx</button>
+                <button class="segBtn" data-series="1" type="button">1xx</button>
+                <button class="segBtn" data-series="2" type="button">2xx</button>
+                <button class="segBtn" data-series="3" type="button">3xx</button>
+                <button class="segBtn" data-series="4" type="button">4xx</button>
+                <button class="segBtn" data-series="5" type="button">5xx</button>
+                <button class="segBtn" data-series="6" type="button">6xx</button>
+                <button class="segBtn" data-series="7" type="button">7xx</button>
+                <button class="segBtn" data-series="8" type="button">8xx</button>
+                <button class="segBtn" data-series="9" type="button">9xx</button>
+              </div>
+            </div>
+
+            <div class="toolgroup" id="pidToolgroup" style="display:none">
+              <span class="toolLabel">PID:</span>
+              <div class="seg" id="pidSeg" aria-label="PID valg"></div>
+            </div>
+
+            <div class="toolgroup" id="filterToolgroup">
+              <span class="toolLabel">Vis:</span>
+              <div class="seg" id="filterSeg">
+                <button class="segBtn segBtn--active" data-filter="all" type="button">Alle</button>
+                <button class="segBtn" data-filter="blue" type="button">Blå</button>
+                <button class="segBtn" data-filter="red" type="button">Rød</button>
+                <button class="segBtn" data-filter="scan" type="button">Scan</button>
+              </div>
+            </div>
+          </div>
+          </div>
+
+          <!-- Overblik placeres lige under Vis: for bedre flow i UI -->
+          <div class="statusbar__overview">
+            <div class="availBox">
+              <div class="muted availTitle">Ledige numre (denne serie): <span id="availCount">—</span></div>
+              <div id="availableCodes" class="availPills" aria-label="Ledige numre">—</div>
+
+              <div class="suffixBox" aria-label="Overblik på tværs af serier">
+                <div class="muted suffixTitle">Tjek suffix (01–99) på tværs af serier</div>
+                <div class="suffixRow">
+                  <input id="suffixInput" class="suffixInput" inputmode="numeric" maxlength="2" placeholder="06" aria-label="Suffix" />
+                  <div id="suffixSeries" class="suffixSeries" aria-label="Serie-overblik">—</div>
+                </div>
+                <div class="muted suffixLegend">Grøn = ledig · Grå = optaget · Farvet prik = valgt i denne post</div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div id="statusLeft" class="muted">Valgte felter: <span id="selectedCodes">—</span></div>
-        <div id="statusHint" class="muted">Klik for at sætte/fjerne kryds</div>
+
+        <div class="statusbar__right">
+          <div class="selectedBox" aria-label="Valgte felter">
+            <div id="statusLeft" class="muted">Valgte felter: <span id="selectedCodes">—</span></div>
+          </div>
+        </div>
       </div>
     </section>
   </main>
 
   <input id="importFile" type="file" accept="application/json" style="display:none" />
+  <input id="excelTagsFile" type="file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" />
   <input id="scanFile" type="file" accept="image/*" style="display:none" />
 
   <div id="loginModal" class="modal" aria-hidden="true">
@@ -171,6 +293,26 @@
         <div class="modal__footer">
           <button class="btn btn--primary" id="btnLoginSave">Log ind</button>
           <button class="btn" id="btnLogout">Log ud</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="revModal" class="modal" aria-hidden="true">
+    <div class="modal__backdrop" data-close="1"></div>
+    <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="revTitle">
+      <div class="modal__header">
+        <div id="revTitle" class="modal__title">Beskrivelse af ændring</div>
+        <button class="btn" id="btnRevClose">Luk</button>
+      </div>
+
+      <div class="modal__body">
+        <label class="modal__label">Kort beskrivelse (fx projektnr. 2025.13254)</label>
+        <textarea id="revDesc" class="input" rows="3" placeholder="Fx 2025.13254 – ændret valg af ventiler / tilføjet 101-109"></textarea>
+
+        <div class="modal__footer">
+          <button class="btn btn--primary" id="btnRevSave">Gem</button>
+          <button class="btn" id="btnRevCancel">Annullér</button>
         </div>
       </div>
     </div>

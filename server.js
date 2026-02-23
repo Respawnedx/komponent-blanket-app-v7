@@ -34,6 +34,7 @@ function send(res, status, body, contentType="text/plain; charset=utf-8"){
 }
 
 function serveStatic(req, res, pathname){
+  // Simple whitelist + folder support (assets)
   const map = {
     "/": "index.html",
     "/index.html": "index.html",
@@ -41,10 +42,20 @@ function serveStatic(req, res, pathname){
     "/app.js": "app.js",
     "/README.txt": "README.txt",
   };
-  const file = map[pathname];
-  if(!file) return false;
 
-  const filePath = path.join(ROOT, file);
+  let filePath = null;
+
+  if(map[pathname]){
+    filePath = path.join(ROOT, map[pathname]);
+  }else if(pathname.startsWith("/assets/")){
+    // Prevent path traversal
+    const safe = pathname.replace(/^\/+/, "");
+    filePath = path.join(ROOT, safe);
+  }else{
+    return false;
+  }
+
+  if(!filePath.startsWith(ROOT)) return false;
   if(!fs.existsSync(filePath)) return false;
 
   const ext = path.extname(filePath).toLowerCase();
@@ -54,7 +65,14 @@ function serveStatic(req, res, pathname){
     ".js":"application/javascript; charset=utf-8",
     ".txt":"text/plain; charset=utf-8",
     ".json":"application/json; charset=utf-8",
+    ".png":"image/png",
+    ".jpg":"image/jpeg",
+    ".jpeg":"image/jpeg",
+    ".svg":"image/svg+xml",
+    ".ico":"image/x-icon",
+    ".webp":"image/webp",
   };
+
   send(res, 200, fs.readFileSync(filePath), types[ext] || "application/octet-stream");
   return true;
 }

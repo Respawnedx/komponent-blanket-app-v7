@@ -7,6 +7,16 @@
   --line:#cfd4dc;
   --line2:#e6e8ee;
   --accent:#2563eb;
+  --mark-blue:#2563eb;
+  --mark-red:#ef4444;
+  /* Fra scan (grøn) */
+  --mark-scan:#22c55e;
+
+  /* PID-farver (bruges kun hvis der er flere PID-numre) */
+  --pid-0:#a855f7; /* lilla */
+  --pid-1:#f97316; /* orange */
+  --pid-2:#06b6d4; /* cyan */
+  --pid-3:#f43f5e; /* pink */
 }
 
 *{box-sizing:border-box}
@@ -59,6 +69,11 @@ body{
   cursor:pointer;
   font-weight:600;
 }
+.btn--sm{
+  padding:6px 8px;
+  border-radius:8px;
+  font-size:12px;
+}
 .btn:hover{border-color:#b8beca}
 .btn:disabled{
   opacity:.55;
@@ -101,8 +116,15 @@ body{
   padding:10px;
   cursor:pointer;
 }
+.record__top{display:flex; justify-content:space-between; gap:8px; align-items:center}
+.record__left{display:flex; align-items:center; gap:10px; min-width:0}
+.record__select{
+  width:16px;
+  height:16px;
+  cursor:pointer;
+}
+.record__title{font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .record:hover{border-color:var(--line)}
-.record__top{display:flex; justify-content:space-between; gap:8px}
 .badge{
   font-size:12px;
   padding:2px 8px;
@@ -110,7 +132,6 @@ body{
   border-radius:999px;
   color:var(--muted);
 }
-.record__title{font-weight:800}
 .record__meta{margin-top:6px; color:var(--muted); font-size:12px; line-height:1.4}
 .record--active{
   border-color:var(--accent);
@@ -123,21 +144,164 @@ body{
   line-height:1.4;
 }
 
+.listTools{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  padding:8px;
+  border:1px dashed var(--line2);
+  border-radius:12px;
+  background:#fafbfc;
+}
+.listTools__row{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.listTools__count{font-size:12px}
+
 .paperWrap{
   display:flex;
   flex-direction:column;
-  align-items:center;
+  /* Let the paper-row use the full available width so the revisions panel can expand */
+  align-items:stretch;
   gap:10px;
 }
 
+.paperRow{
+  display:flex;
+  align-items:flex-start;
+  gap:14px;
+  width:100%;
+}
+
+/* Revisions side panel (outside the paper) */
+.revisionsDock{
+  /* Expand to fill remaining space on the right */
+  flex: 1 1 auto;
+  min-width: 360px;
+  width: auto;
+  background:#fff;
+  border:1px solid var(--line2);
+  border-radius:14px;
+  padding:14px 14px 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.08);
+  position:sticky;
+  top:74px; /* below topbar */
+  max-height: calc(100vh - 96px);
+  overflow:auto;
+}
+
+.revisionsDock__title{
+  font-weight:700;
+  margin-bottom:4px;
+}
+
+.revisionsDock__sub{
+  font-size:12.5px;
+  margin-bottom:10px;
+}
+
+.revisionsDock__last{
+  border:1px solid var(--line2);
+  border-radius:12px;
+  padding:10px 10px 8px;
+  background:#fafafa;
+  margin-bottom:10px;
+}
+
+.revLastSummary{
+  font-weight:600;
+  margin-top:2px;
+}
+
+.revLastChanges{
+  margin-top:6px;
+  line-height:1.35;
+  white-space:pre-wrap;
+}
+
+.revisionsDock__tableWrap{
+  max-height: 380px;
+  overflow:auto;
+  border:1px solid var(--line2);
+  border-radius:12px;
+  background:#fff;
+}
+
+.revisionsDock__hint{
+  margin-top:10px;
+  font-size:12.5px;
+}
+
+.revTable th:nth-child(4),
+.revTable td:nth-child(4){
+  width: 48%;
+}
+
+.revTable td:nth-child(4){
+  font-size:12.5px;
+  line-height:1.3;
+  white-space:pre-wrap;
+}
+
+
 .paper{
-  width: 860px;           /* approx to look like scan proportions */
+  width: 860px;
+  flex: 0 0 860px;
   background:var(--paper);
   border:1px solid var(--line2);
   border-radius:14px;
   padding:32px 44px 28px;
   box-shadow: 0 20px 60px rgba(0,0,0,.08);
 }
+
+
+/* --- Paper body: venstre (felter) + højre (revisions) --- */
+.paperBody{
+  display:block;
+}
+
+.sectionsWrap{min-width:0}
+
+.revisionsPanel{
+  border-left: 1px solid var(--line2);
+  padding-left: 16px;
+}
+.revisionsPanel__title{
+  font-weight:800;
+  text-decoration: underline;
+  margin-top: 2px;
+}
+.revisionsPanel__sub{font-size:12px; margin-top:4px}
+.revisionsPanel__hint{font-size:12px; margin-top:10px; line-height:1.35}
+
+.revisionsPanel__tableWrap{
+  margin-top:10px;
+  max-height: 540px;
+  overflow:auto;
+  border:1px solid var(--line2);
+  border-radius:10px;
+  background:#fff;
+}
+.revTable{
+  width:100%;
+  border-collapse: collapse;
+  font-size:12px;
+}
+.revTable th, .revTable td{
+  padding:8px 8px;
+  border-bottom:1px solid var(--line2);
+  vertical-align:top;
+}
+.revTable th{
+  position: sticky;
+  top:0;
+  background:#fff;
+  text-align:left;
+  font-weight:800;
+  border-bottom:1px solid var(--line);
+  z-index:2;
+}
+.revTable td:nth-child(1){white-space:nowrap; width:92px}
+.revTable td:nth-child(2){white-space:nowrap; width:52px; font-weight:800}
+
 
 /* --- Header fields --- */
 .headerFields{
@@ -254,7 +418,277 @@ body{
   background:#fff;
   border:1px solid var(--line2);
   border-radius:12px;
+  align-items:flex-start;
 }
+
+.statusbar__left{
+  flex:1;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  /* Center the control block within the available area */
+  align-items:center;
+}
+
+/* Keep the left-side content readable and visually centered */
+.statusbar__left > .legend,
+.statusbar__left > .controlBox,
+.statusbar__left > .statusbar__overview{
+  width:100%;
+  max-width:720px;
+}
+
+.toolbar{ justify-content:center; }
+
+.statusbar__right{
+  flex:0 0 240px;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:8px;
+}
+
+.statusbar__overview{
+  width:100%;
+}
+
+.statusbar__right .codePills{ justify-content:flex-end; }
+
+/* --- Statusbar: boxed controls + boxed selected list --- */
+.controlBox{
+  width:100%;
+  border:1px solid var(--line2);
+  border-radius:12px;
+  padding:8px 10px;
+  background:#fafafa;
+}
+
+/* Make Markér/Serie/PID/Vis stack vertically under each other (left aligned),
+   while the whole control block stays visually centered via max-width on statusbar__left */
+.controlBox .toolbar{
+  justify-content:flex-start;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:8px;
+}
+
+.selectedBox{
+  width:100%;
+  border:1px solid var(--line2);
+  border-radius:12px;
+  padding:8px 10px;
+  background:#fafafa;
+}
+
+.selectedBox #statusLeft{ text-align:left; }
+
+.selectedBox .codePills{ justify-content:flex-start !important; }
+
+.availBox{
+  width:100%;
+  /* Match width with the control box so the stacked boxes align */
+  max-width:720px;
+  border:1px solid var(--line2);
+  border-radius:12px;
+  padding:8px 10px;
+  background:#fafafa;
+}
+
+.availTitle{ font-weight:700; }
+
+.availPills{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  max-height:92px;
+  overflow:auto;
+  padding-top:6px;
+}
+
+.availPill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  border:1px solid var(--line2);
+  border-radius:999px;
+  padding:2px 8px;
+  font-weight:800;
+  font-size:12px;
+  background:#fff;
+  cursor:default;
+  user-select:none;
+}
+
+.availPill[data-state="taken"]{
+  opacity:.55;
+  cursor:default;
+}
+
+.availPill[data-state="free"]{
+  border-style:dashed;
+}
+
+/* Availability pills are informational only (no click handler in JS) */
+
+.suffixBox{
+  margin-top:10px;
+  padding-top:10px;
+  border-top:1px dashed var(--line2);
+}
+.suffixTitle{ font-weight:700; margin-bottom:6px; }
+.suffixRow{ display:flex; gap:8px; align-items:center; }
+.suffixInput{
+  width:56px;
+  height:30px;
+  padding:4px 8px;
+  border:1px solid var(--line2);
+  border-radius:10px;
+  background:#fff;
+  font-weight:800;
+  text-align:center;
+}
+.suffixSeries{ display:flex; flex-wrap:wrap; gap:6px; min-height:26px; }
+.sxPill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  border:1px solid var(--line2);
+  border-radius:999px;
+  padding:2px 8px;
+  font-weight:800;
+  font-size:12px;
+  background:#fff;
+  user-select:none;
+}
+.sxPillDot{ width:10px; height:10px; border-radius:999px; display:inline-block; background:#d1d5db; }
+.sxPill[data-state="free"] .sxPillDot{ background: rgba(16,185,129,.85); }
+.sxPill[data-state="free"]{ border-style:dashed; box-shadow: inset 0 0 0 1px rgba(16,185,129,.25); }
+.sxPill[data-state="taken"]{ opacity:.55; }
+.sxPill[data-state="selected"][data-mark="blue"] .sxPillDot{ background:var(--mark-blue); }
+.sxPill[data-state="selected"][data-mark="red"] .sxPillDot{ background:var(--mark-red); }
+.sxPill[data-state="selected"][data-mark="scan"] .sxPillDot{ background:var(--mark-scan); }
+.suffixLegend{ margin-top:6px; font-size:12px; }
+
+/* Keep checkboxes/labels readable on 1xx..9xx by giving columns a bit more room */
+html:not([data-series="0"]) .grid{
+  column-gap: 18px;
+}
+
+html:not([data-series="0"]) .grid .item{
+  gap: 6px;
+}
+
+.availPillDot{ width:10px; height:10px; border-radius:999px; display:inline-block; background:#d1d5db; }
+
+.availPill[data-state="free"] .availPillDot{ background: rgba(16,185,129,.85); }
+
+.availPill[data-state="selected"][data-mark="blue"] .availPillDot{ background:var(--mark-blue); }
+.availPill[data-state="selected"][data-mark="red"] .availPillDot{ background:var(--mark-red); }
+.availPill[data-state="selected"][data-mark="scan"] .availPillDot{ background:var(--mark-scan); }
+
+/* PID outline på "selected" i oversigten */
+.availPill[data-state="selected"][data-pid="0"]{ box-shadow: inset 0 0 0 2px var(--pid-0); }
+.availPill[data-state="selected"][data-pid="1"]{ box-shadow: inset 0 0 0 2px var(--pid-1); }
+.availPill[data-state="selected"][data-pid="2"]{ box-shadow: inset 0 0 0 2px var(--pid-2); }
+.availPill[data-state="selected"][data-pid="3"]{ box-shadow: inset 0 0 0 2px var(--pid-3); }
+
+
+.toolbar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px 14px;
+  align-items:center;
+}
+
+.toolgroup{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.toolLabel{
+  color:var(--muted);
+  font-weight:600;
+  font-size:13px;
+}
+
+.seg{
+  display:inline-flex;
+  border:1px solid var(--line);
+  border-radius:10px;
+  overflow:hidden;
+  background:#fff;
+}
+
+.segBtn{
+  border:0;
+  background:transparent;
+  padding:6px 10px;
+  font-weight:700;
+  cursor:pointer;
+  font-size:13px;
+  display:inline-flex;
+  align-items:center;
+}
+
+.segBtn:hover{
+  background:rgba(0,0,0,0.04);
+}
+
+.segBtn--active{
+  background:var(--accent);
+  color:#fff;
+}
+
+.codePills{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+
+.pill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  border:1px solid var(--line2);
+  border-radius:999px;
+  padding:2px 8px;
+  font-weight:700;
+  font-size:13px;
+  background:#fff;
+}
+
+.pillDot{
+  width:10px;
+  height:10px;
+  border-radius:999px;
+  display:inline-block;
+}
+
+.pillPidDot{
+  width:10px;
+  height:10px;
+  border-radius:999px;
+  display:inline-block;
+  background:#d1d5db;
+}
+
+.pill[data-mark="blue"] .pillDot{ background:var(--mark-blue); }
+.pill[data-mark="red"] .pillDot{ background:var(--mark-red); }
+.pill[data-mark="scan"] .pillDot{ background:var(--mark-scan); }
+
+.pill[data-pid="0"] .pillPidDot{ background:var(--pid-0); }
+.pill[data-pid="1"] .pillPidDot{ background:var(--pid-1); }
+.pill[data-pid="2"] .pillPidDot{ background:var(--pid-2); }
+.pill[data-pid="3"] .pillPidDot{ background:var(--pid-3); }
+
+.pidDot{ width:10px; height:10px; border-radius:999px; display:inline-block; margin-right:6px; }
+.pidDot[data-pid="0"]{ background:var(--pid-0); }
+.pidDot[data-pid="1"]{ background:var(--pid-1); }
+.pidDot[data-pid="2"]{ background:var(--pid-2); }
+.pidDot[data-pid="3"]{ background:var(--pid-3); }
 
 .userBadge{
   display:inline-flex;
@@ -279,15 +713,45 @@ body{
   width:10px; height:10px; border-radius:2px; display:inline-block;
   border:1px solid var(--line2);
 }
-.swatch--manual{background:#111}
-.swatch--scan{background:#0ea5e9}
+.swatch--blue{background:var(--mark-blue)}
+.swatch--red{background:var(--mark-red)}
+.swatch--scan{background:var(--mark-scan)}
 
-/* Scan vs manual check color */
+/* Check mark colors (blå/rød/scan) */
 .cb:checked::after{
-  background:#111; /* manual default */
+  background:var(--mark-blue);
 }
-.cb[data-source="scan"]:checked::after{
-  background:#0ea5e9; /* scanned */
+.cb[data-mark="blue"]:checked::after{ background:var(--mark-blue); }
+.cb[data-mark="red"]:checked::after{ background:var(--mark-red); }
+.cb[data-mark="scan"]:checked::after{ background:var(--mark-scan); }
+
+/* PID outline (hvis flere PID-numre) */
+.cb:checked[data-pid="0"]{ outline:2px solid var(--pid-0); outline-offset:1px; }
+.cb:checked[data-pid="1"]{ outline:2px solid var(--pid-1); outline-offset:1px; }
+.cb:checked[data-pid="2"]{ outline:2px solid var(--pid-2); outline-offset:1px; }
+.cb:checked[data-pid="3"]{ outline:2px solid var(--pid-3); outline-offset:1px; }
+
+/* Filter: dim selected items that don't match current filter */
+.cb[data-dim="1"]{
+  opacity:.22;
+}
+.cb[data-dim="1"] + .code{
+  opacity:.35;
+}
+
+
+
+/* --- Responsive: stack revisions below on small screens --- */
+@media (max-width: 1100px){
+  .paper{ width: calc(100vw - 36px); padding:24px 18px 18px; }
+  .paperBody{ display:block; }
+  .revisionsPanel{ border-left:none; padding-left:0; margin-top:18px; }
+  .revisionsPanel__tableWrap{ max-height:none; }
+  .grid{ column-gap: 18px; row-gap: 10px; margin-left:18px; }
+  .statusbar{ width: calc(100vw - 36px); flex-direction:column; }
+  .statusbar__right{ flex:0 0 auto; align-items:flex-start; }
+  .statusbar__right .codePills{ justify-content:flex-start; }
+  .availBox{ max-width: none; }
 }
 
 /* --- Print --- */
@@ -298,7 +762,7 @@ body{
 
 @media print{
   body{background:#fff}
-  .topbar,.sidebar,.statusbar{display:none !important}
+  .topbar,.sidebar,.statusbar,.revisionsDock{display:none !important}
   .workspace{display:block; padding:0}
   .paper{
     width: 194mm;            /* 210mm minus margins */
@@ -329,7 +793,19 @@ body{
   .section__title{font-size:13.5px}
   .section__subtitle{font-size:12.8px; margin:2px 0 6px}
 
-  .grid{
+  
+
+.paperBody{display:block}
+.revisionsPanel{
+  border:none;
+  padding-left:0;
+  margin-top:10mm;
+  page-break-inside: avoid;
+}
+.revisionsPanel__tableWrap{max-height:none}
+.revTable{font-size:12px}
+
+.grid{
     margin-left:18px;
     grid-auto-rows: 22px;
     column-gap: 18px;
