@@ -596,7 +596,7 @@ body.is-authenticated .authGate{
   min-width:0;
 }
 
-.rightRail{
+.supportArea{
   width:440px;
   flex:0 0 440px;
   display:flex;
@@ -607,6 +607,33 @@ body.is-authenticated .authGate{
   top:80px;
   max-height:calc(100vh - 102px);
   overflow:auto;
+}
+
+.rightRail{
+  width:100%;
+  flex:none;
+  min-width:0;
+}
+
+@media (min-width: 2200px){
+  .supportArea{
+    width:876px;
+    flex:0 0 876px;
+    flex-direction:row;
+    align-items:flex-start;
+    position:static;
+    max-height:none;
+    overflow:visible;
+  }
+
+  .rightRail{
+    width:440px;
+    flex:0 0 440px;
+    position:sticky;
+    top:80px;
+    max-height:calc(100vh - 102px);
+    overflow:auto;
+  }
 }
 
 /* Revisions side panel (outside the paper) */
@@ -687,7 +714,7 @@ body.is-authenticated .authGate{
   max-width:340px;
 }
 
-.rightRail .revisionsDock{
+.supportArea > .revisionsDock{
   width:100%;
   max-width:none;
   min-width:0;
@@ -697,9 +724,25 @@ body.is-authenticated .authGate{
   max-height:none;
 }
 
-.rightRail .revisionsDock.is-compact{
+.supportArea > .revisionsDock.is-compact{
   flex-basis:auto;
   max-width:none;
+}
+
+@media (min-width: 2200px){
+  .supportArea > .revisionsDock{
+    width:420px;
+    flex:0 0 420px;
+    position:sticky;
+    top:80px;
+    max-height:calc(100vh - 102px);
+    overflow:auto;
+  }
+
+  .supportArea > .revisionsDock.is-compact{
+    flex-basis:420px;
+    max-width:420px;
+  }
 }
 
 .revisionsDock.is-compact .revisionsDock__timeline,
@@ -1456,7 +1499,7 @@ html:not([data-series="0"]) .grid .item{
     order:1;
   }
 
-  .rightRail{
+  .supportArea{
     order:2;
     width:min(860px, calc(100vw - 28px));
     min-width:0;
@@ -1464,6 +1507,10 @@ html:not([data-series="0"]) .grid .item{
     overflow:visible;
     position:static;
     flex:0 1 auto;
+  }
+
+  .rightRail{
+    width:100%;
   }
 
   .paper{
@@ -1505,9 +1552,13 @@ html:not([data-series="0"]) .grid .item{
     flex:0 1 auto;
   }
 
-  .rightRail{
+  .supportArea{
     width:min(860px, calc(100vw - 28px));
     flex:0 1 auto;
+  }
+
+  .rightRail{
+    width:100%;
   }
 
   .paperRow{
@@ -1649,6 +1700,7 @@ html:not([data-series="0"]) .grid .item{
 
   .paper,
   .statusbar,
+  .supportArea,
   .rightRail,
   .revisionsDock{
     width:100%;

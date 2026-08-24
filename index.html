@@ -252,103 +252,105 @@
 
         </div>
 
-        <aside class="rightRail" aria-label="Arbejdsstatus og historik">
-        <div class="statusbar">
-          <div class="statusbar__header">
-            <div>
-              <div class="statusbar__title">Arbejdsstatus</div>
-              <div class="statusbar__sub muted">Status, valgte numre og ledige rækker</div>
-            </div>
-          </div>
-
-          <div class="statusbar__selected">
-            <div class="selectedBox" aria-label="Valgte numre">
-              <div id="statusLeft" class="muted">Valgte numre: <span id="selectedCodes">—</span></div>
-            </div>
-          </div>
-
-          <div class="statusbar__left">
-            <div class="legend">
-              <span class="legend__item"><span class="swatch swatch--blue"></span>I brug</span>
-              <span class="legend__item"><span class="swatch swatch--reserved"></span>Projekt</span>
-              <span class="legend__item"><span class="swatch swatch--red"></span>Frigivet</span>
-              <span class="legend__item"><span class="swatch swatch--scan"></span>Scan/import</span>
-            </div>
-
-            <div class="controlBox" aria-label="Valg (markér/serie/PID/vis)">
-            <div class="toolbar">
-              <div class="toolgroup" id="markToolgroup">
-                <span class="toolLabel">Status:</span>
-                <div class="seg" id="markSeg">
-                  <button class="segBtn segBtn--active" data-mark="blue" type="button">I brug</button>
-                  <button class="segBtn" data-mark="reserved" type="button">Projekt</button>
-                  <button class="segBtn" data-mark="red" type="button">Frigivet</button>
-                </div>
-              </div>
-
-              <div class="toolgroup" id="pidToolgroup" style="display:none">
-                <span class="toolLabel">PID:</span>
-                <div class="seg" id="pidSeg" aria-label="PID valg"></div>
-              </div>
-
-              <div class="toolgroup" id="filterToolgroup">
-                <span class="toolLabel">Vis:</span>
-                <div class="seg" id="filterSeg">
-                  <button class="segBtn segBtn--active" data-filter="all" type="button">Alle</button>
-                  <button class="segBtn" data-filter="blue" type="button">I brug</button>
-                  <button class="segBtn" data-filter="reserved" type="button">Projekt</button>
-                  <button class="segBtn" data-filter="red" type="button">Frigivet</button>
-                  <button class="segBtn" data-filter="scan" type="button">Scan</button>
-                </div>
+        <div class="supportArea">
+          <aside class="rightRail" aria-label="Arbejdsstatus">
+          <div class="statusbar">
+            <div class="statusbar__header">
+              <div>
+                <div class="statusbar__title">Arbejdsstatus</div>
+                <div class="statusbar__sub muted">Status, valgte numre og ledige rækker</div>
               </div>
             </div>
+
+            <div class="statusbar__selected">
+              <div class="selectedBox" aria-label="Valgte numre">
+                <div id="statusLeft" class="muted">Valgte numre: <span id="selectedCodes">—</span></div>
+              </div>
             </div>
 
-            <div class="statusbar__overview">
-              <div class="availBox">
-                <div class="muted availTitle">Ledige numre (denne serie): <span id="availCount">—</span></div>
-                <div id="availableCodes" class="availPills" aria-label="Ledige numre">—</div>
+            <div class="statusbar__left">
+              <div class="legend">
+                <span class="legend__item"><span class="swatch swatch--blue"></span>I brug</span>
+                <span class="legend__item"><span class="swatch swatch--reserved"></span>Projekt</span>
+                <span class="legend__item"><span class="swatch swatch--red"></span>Frigivet</span>
+                <span class="legend__item"><span class="swatch swatch--scan"></span>Scan/import</span>
+              </div>
 
-                <div class="matrixBox" aria-label="Ledige matrix-rækker">
-                  <div class="muted suffixTitle">Bedste ledige suffix-rækker på tværs af serier</div>
-                  <div id="matrixCandidates" class="matrixCandidates" aria-label="Ledige suffix-rækker">—</div>
-                </div>
-
-                <div class="suffixBox" aria-label="Overblik på tværs af serier">
-                  <div class="muted suffixTitle">Tjek suffix (01–99) i hele serien</div>
-                  <div class="suffixRow">
-                    <input id="suffixInput" class="suffixInput" inputmode="numeric" maxlength="2" placeholder="06" aria-label="Suffix" />
-                    <div id="suffixSeries" class="suffixSeries" aria-label="Serie-overblik">—</div>
+              <div class="controlBox" aria-label="Valg (markér/serie/PID/vis)">
+              <div class="toolbar">
+                <div class="toolgroup" id="markToolgroup">
+                  <span class="toolLabel">Status:</span>
+                  <div class="seg" id="markSeg">
+                    <button class="segBtn segBtn--active" data-mark="blue" type="button">I brug</button>
+                    <button class="segBtn" data-mark="reserved" type="button">Projekt</button>
+                    <button class="segBtn" data-mark="red" type="button">Frigivet</button>
                   </div>
-                  <div class="muted suffixLegend">Grøn = ledig · Orange = projekt · Grå = optaget · Farvet prik = valgt i denne post</div>
+                </div>
+
+                <div class="toolgroup" id="pidToolgroup" style="display:none">
+                  <span class="toolLabel">PID:</span>
+                  <div class="seg" id="pidSeg" aria-label="PID valg"></div>
+                </div>
+
+                <div class="toolgroup" id="filterToolgroup">
+                  <span class="toolLabel">Vis:</span>
+                  <div class="seg" id="filterSeg">
+                    <button class="segBtn segBtn--active" data-filter="all" type="button">Alle</button>
+                    <button class="segBtn" data-filter="blue" type="button">I brug</button>
+                    <button class="segBtn" data-filter="reserved" type="button">Projekt</button>
+                    <button class="segBtn" data-filter="red" type="button">Frigivet</button>
+                    <button class="segBtn" data-filter="scan" type="button">Scan</button>
+                  </div>
+                </div>
+              </div>
+              </div>
+
+              <div class="statusbar__overview">
+                <div class="availBox">
+                  <div class="muted availTitle">Ledige numre (denne serie): <span id="availCount">—</span></div>
+                  <div id="availableCodes" class="availPills" aria-label="Ledige numre">—</div>
+
+                  <div class="matrixBox" aria-label="Ledige matrix-rækker">
+                    <div class="muted suffixTitle">Bedste ledige suffix-rækker på tværs af serier</div>
+                    <div id="matrixCandidates" class="matrixCandidates" aria-label="Ledige suffix-rækker">—</div>
+                  </div>
+
+                  <div class="suffixBox" aria-label="Overblik på tværs af serier">
+                    <div class="muted suffixTitle">Tjek suffix (01–99) i hele serien</div>
+                    <div class="suffixRow">
+                      <input id="suffixInput" class="suffixInput" inputmode="numeric" maxlength="2" placeholder="06" aria-label="Suffix" />
+                      <div id="suffixSeries" class="suffixSeries" aria-label="Serie-overblik">—</div>
+                    </div>
+                    <div class="muted suffixLegend">Grøn = ledig · Orange = projekt · Grå = optaget · Farvet prik = valgt i denne post</div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+          </aside>
 
-        <aside class="revisionsDock is-compact" aria-label="Revisionslog">
-          <div class="revisionsDock__header">
-            <div>
-              <div class="revisionsDock__title">Revisionslog</div>
-              <div class="revisionsDock__sub muted">Seneste ændring og historik</div>
+          <aside class="revisionsDock is-compact" aria-label="Revisionslog">
+            <div class="revisionsDock__header">
+              <div>
+                <div class="revisionsDock__title">Revisionslog</div>
+                <div class="revisionsDock__sub muted">Seneste ændring og historik</div>
+              </div>
+              <button id="btnToggleRevisions" class="btn btn--sm" type="button" aria-expanded="false">Vis log</button>
             </div>
-            <button id="btnToggleRevisions" class="btn btn--sm" type="button" aria-expanded="false">Vis log</button>
-          </div>
 
-          <div class="revisionsDock__last">
-            <div class="muted">Seneste ændring</div>
-            <div id="revLastSummary" class="revLastSummary">—</div>
-            <div id="revLastChanges" class="revLastChanges muted">—</div>
-          </div>
+            <div class="revisionsDock__last">
+              <div class="muted">Seneste ændring</div>
+              <div id="revLastSummary" class="revLastSummary">—</div>
+              <div id="revLastChanges" class="revLastChanges muted">—</div>
+            </div>
 
-          <div class="revisionsDock__timeline" id="revCards" aria-label="Revisionshistorik">
-            <div class="muted">Ingen ændringer endnu.</div>
-          </div>
+            <div class="revisionsDock__timeline" id="revCards" aria-label="Revisionshistorik">
+              <div class="muted">Ingen ændringer endnu.</div>
+            </div>
 
-          <div class="revisionsDock__hint muted">Tip: Ved <strong>Gem</strong> bliver du bedt om en kort beskrivelse (fx projektnr.).</div>
-        </aside>
-        </aside>
+            <div class="revisionsDock__hint muted">Tip: Ved <strong>Gem</strong> bliver du bedt om en kort beskrivelse (fx projektnr.).</div>
+          </aside>
+        </div>
       </div>
     </section>
   </main>
