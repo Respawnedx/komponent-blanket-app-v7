@@ -32,7 +32,7 @@ async function forceLocalMode(page){
 
 test("component database UI smoke test", async ({ page }) => {
   await forceLocalMode(page);
-  await page.goto("/");
+  await page.goto(process.env.UI_URL || "/");
 
   await expect(page.locator("#authGate")).toBeVisible();
   await page.locator("#gateLoginInitials").fill(login);
