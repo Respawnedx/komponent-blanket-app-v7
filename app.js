@@ -1900,20 +1900,7 @@ function renderRecordList(){
       `<div class="muted">Sidste ændring: ${escapeHtml(lastRevisionString(rec) || "—")}</div>`;
 
     const actions = document.createElement("div");
-    actions.style.marginTop = "8px";
-    actions.style.display = "flex";
-    actions.style.gap = "8px";
-
-    const btnUse = document.createElement("button");
-    btnUse.className = "btn btn--primary";
-    btnUse.textContent = "Åbn";
-    btnUse.addEventListener("click", (e) => {
-      e.stopPropagation();
-      setFormData(rec);
-      renderRecordList();
-    });
-
-    actions.appendChild(btnUse);
+    actions.className = "record__actions";
 
     if(canManageUsers()){
       const btnDel = document.createElement("button");
@@ -1941,7 +1928,7 @@ function renderRecordList(){
 
     card.appendChild(top);
     card.appendChild(meta);
-    card.appendChild(actions);
+    if(actions.childElementCount) card.appendChild(actions);
 
     recordListEl.appendChild(card);
   });
@@ -3072,7 +3059,7 @@ function startNewPost(){
   setEditingEnabled();
 }
 
-el("btnNew").addEventListener("click", startNewPost);
+el("btnNew")?.addEventListener("click", startNewPost);
 btnNewSide?.addEventListener("click", startNewPost);
 
 async function saveCurrentRecord(options = {}){

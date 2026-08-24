@@ -561,6 +561,7 @@ body.is-authenticated .authGate{
   color:var(--muted);
 }
 .record__meta{margin-top:6px; color:var(--muted); font-size:12px; line-height:1.4}
+.record__actions{display:flex; gap:8px; margin-top:8px}
 .record--active{
   border-color:var(--accent);
   box-shadow:0 0 0 3px rgba(0,122,61,.14);
