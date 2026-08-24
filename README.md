@@ -64,7 +64,9 @@ The availability panel shows free numbers in the active series and suggests suff
 
 Saving a record collects the current form fields and selected setup codes into one JSON object. Before saving, the user is asked for a short revision description. The app compares the previous saved version with the new version and writes a readable revision summary showing added, removed, and changed tags.
 
-Checkbox changes also update a local browser draft immediately. This draft is intentionally not a cloud autosave: the official D1 record and revision log only change after the user presses Save and enters a revision description. This keeps the audit trail readable while still protecting against accidentally closing the page.
+Status changes update a local browser draft immediately and are autosaved after a short debounce. Autosaved status changes also create revision entries, so `I brug`, `Projekt`, `Frigivet`, and blank-state transitions are logged even if the user does not press the manual Save button.
+
+Master-data fields such as description, plant, PID, and signature are kept as a local draft until the user deliberately presses **Gem ændringer**. If the browser is closed while a draft or autosave is pending, the browser shows its standard unsaved-changes warning.
 
 ## Import, Export, and Print
 
@@ -78,6 +80,8 @@ The app supports:
 - Admin-only JSON backup export/import for prototype transfer and troubleshooting.
 
 Excel/CSV support is loaded from the SheetJS CDN in `index.html`. For Microsoft Access migration, the intended prototype path is to export an Access table or query to Excel/CSV with one row per tag/allocation, then import that file into this app.
+
+See [docs/import-formats.md](docs/import-formats.md) for the exact Access/Excel/CSV tag-list format, JSON backup schema, import behavior, examples, and current migration limitations.
 
 ## Running Locally
 

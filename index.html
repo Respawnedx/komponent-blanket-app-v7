@@ -388,7 +388,29 @@
             <span>Indlæser en lokal databasebackup. Accepterer både gamle rene post-lister og nye backup-filer med metadata.</span>
           </button>
         </div>
-        <div class="modal__note">Kun admin kan importere data. Tag altid en Backup JSON før større import.</div>
+        <details class="importDocs">
+          <summary>Se formatkrav</summary>
+          <div class="importDocs__grid">
+            <div>
+              <strong>Access / Excel / CSV</strong>
+              <ul>
+                <li>Første ark læses.</li>
+                <li>Brug kolonnen <code>NR</code>.</li>
+                <li>Format: <code>1400.34</code>, <code>1400.034</code> eller <code>1400.210</code>.</li>
+                <li>Andre kolonner ignoreres i denne prototype.</li>
+              </ul>
+            </div>
+            <div>
+              <strong>JSON backup</strong>
+              <ul>
+                <li>Brug filer fra knappen <strong>Backup JSON</strong>.</li>
+                <li>Indeholder hele poster, revisionsdata og tagstatus.</li>
+                <li>Cloud-import opdaterer/opretter poster, men sletter ikke manglende poster.</li>
+              </ul>
+            </div>
+          </div>
+        </details>
+        <div class="modal__note">Kun admin kan importere data. Tag altid en Backup JSON før større import. Se også <code>docs/import-formats.md</code> i projektet.</div>
       </div>
     </div>
   </div>

@@ -2003,6 +2003,58 @@ html:not([data-series="0"]) .grid .item{
   text-transform:uppercase;
 }
 
+.importDocs{
+  margin-top:12px;
+  border:1px solid var(--line2);
+  border-radius:8px;
+  background:#fff;
+  overflow:hidden;
+}
+
+.importDocs summary{
+  cursor:pointer;
+  padding:10px 12px;
+  color:var(--ink-soft);
+  font-weight:900;
+}
+
+.importDocs[open] summary{
+  border-bottom:1px solid var(--line2);
+  background:var(--surface-soft);
+}
+
+.importDocs__grid{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:12px;
+  padding:12px;
+}
+
+.importDocs__grid > div > strong{
+  display:block;
+  margin-bottom:6px;
+  color:var(--accent-strong);
+}
+
+.importDocs ul{
+  margin:0;
+  padding-left:18px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+  line-height:1.45;
+}
+
+.importDocs code,
+.modal__note code{
+  border:1px solid var(--line2);
+  border-radius:6px;
+  padding:1px 5px;
+  background:#fff;
+  color:var(--ink-soft);
+  font-size:12px;
+}
+
 .adminUsersLayout{
   display:grid;
   grid-template-columns:minmax(0, 1.35fr) minmax(280px, .85fr);
@@ -2123,7 +2175,8 @@ html:not([data-series="0"]) .grid .item{
 
   .adminUsersLayout,
   .adminUserRow,
-  .importChoiceGrid{
+  .importChoiceGrid,
+  .importDocs__grid{
     grid-template-columns:1fr;
   }
 
