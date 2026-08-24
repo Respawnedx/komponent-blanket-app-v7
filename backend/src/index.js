@@ -52,7 +52,16 @@ function getRecordStatus(rec, code) {
 }
 
 function plannerMutationError(prevRec, rec) {
-  if (!prevRec) return "Planner cannot create records";
+  if (!prevRec) {
+    const codes = (Array.isArray(rec?.selectedCodes) ? rec.selectedCodes : []).map(String);
+    if (!codes.length) return "Planner must select at least one project reservation";
+    for (const code of codes) {
+      if (getRecordStatus(rec, code) !== "reserved") {
+        return `Planner can only create records with project reservations (${code})`;
+      }
+    }
+    return "";
+  }
 
   const lockedFields = ["hovedkomponentnr", "beskrivelse", "anlaeg", "pid", "signatur1", "signatur2"];
   for (const key of lockedFields) {

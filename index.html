@@ -27,13 +27,13 @@
         <button id="btnLogin" class="btn">Login</button>
         <button id="btnAdminCreateUser" class="btn" style="display:none">Brugere</button>
       </div>
-      <div class="topbar__group">
+      <div class="topbar__group" id="topbarPostGroup">
         <span class="topbar__groupLabel">Post</span>
-        <button id="btnNew" class="btn">Ny</button>
+        <button id="btnNew" class="btn">Ny post</button>
         <button id="btnSave" class="btn btn--primary">Gem ændringer</button>
         <button id="btnLoad" class="btn">Opdater data</button>
       </div>
-      <div class="topbar__group">
+      <div class="topbar__group" id="topbarDataGroup">
         <span class="topbar__groupLabel">Data</span>
         <button id="btnOCR" class="btn">Scan papir</button>
         <button id="btnPrint" class="btn">Print / PDF</button>
@@ -85,8 +85,22 @@
   <main class="workspace">
     <aside class="sidebar">
       <div class="sidebar__section">
-        <div class="sidebar__title">Søg</div>
-        <input id="search" class="input" placeholder="Søg (hovedkomponentnr, tag, anlæg, PID...)" />
+        <div class="searchPanel">
+          <div class="searchPanel__header">
+            <div>
+              <div class="sidebar__title">Søg</div>
+              <div class="searchPanel__sub muted">Find post, PID eller fuldt tag</div>
+            </div>
+            <button id="btnNewSide" class="btn btn--primary btn--sm" type="button">Ny post</button>
+          </div>
+          <div class="searchPanel__box">
+            <input id="search" class="input searchInput" placeholder="Søg hovednr., tag, anlæg, PID..." />
+            <div class="searchPanel__meta">
+              <span id="searchResultCount">—</span>
+              <span id="searchModeHint">Cloud</span>
+            </div>
+          </div>
+        </div>
 
         <div class="listTools">
           <div class="listTools__row">
@@ -135,8 +149,31 @@
           <div class="fieldRow">
             <label class="label">Signatur</label>
             <div class="signature">
-              <input id="fSign1" class="field field--sig" />
-              <input id="fSign2" class="field field--sig" />
+              <label class="signatureField">
+                <span>Initialer</span>
+                <input id="fSign1" class="field field--sig" placeholder="NJ" />
+              </label>
+              <label class="signatureField signatureField--year">
+                <span>Årgang</span>
+                <input id="fSign2" class="field field--sig field--year" inputmode="numeric" placeholder="2026" />
+              </label>
+            </div>
+          </div>
+          <div class="fieldRow fieldRow--series">
+            <label class="label">Serie</label>
+            <div class="toolgroup toolgroup--inline" id="seriesToolgroup">
+              <div class="seg" id="seriesSeg">
+                <button class="segBtn segBtn--active" data-series="0" type="button">0xx</button>
+                <button class="segBtn" data-series="1" type="button">1xx</button>
+                <button class="segBtn" data-series="2" type="button">2xx</button>
+                <button class="segBtn" data-series="3" type="button">3xx</button>
+                <button class="segBtn" data-series="4" type="button">4xx</button>
+                <button class="segBtn" data-series="5" type="button">5xx</button>
+                <button class="segBtn" data-series="6" type="button">6xx</button>
+                <button class="segBtn" data-series="7" type="button">7xx</button>
+                <button class="segBtn" data-series="8" type="button">8xx</button>
+                <button class="segBtn" data-series="9" type="button">9xx</button>
+              </div>
             </div>
           </div>
         </div>
@@ -227,20 +264,8 @@
             <div id="revLastChanges" class="revLastChanges muted">—</div>
           </div>
 
-          <div class="revisionsDock__tableWrap">
-            <table class="revTable" aria-label="Revisionshistorik">
-              <thead>
-                <tr>
-                  <th>Dato</th>
-                  <th>Init.</th>
-                  <th>Beskrivelse</th>
-                  <th>Ændrede tags</th>
-                </tr>
-              </thead>
-              <tbody id="revTbody">
-                <tr><td colspan="4" class="muted">Ingen ændringer endnu.</td></tr>
-              </tbody>
-            </table>
+          <div class="revisionsDock__timeline" id="revCards" aria-label="Revisionshistorik">
+            <div class="muted">Ingen ændringer endnu.</div>
           </div>
 
           <div class="revisionsDock__hint muted">Tip: Ved <strong>Gem</strong> bliver du bedt om en kort beskrivelse (fx projektnr.).</div>
@@ -264,22 +289,6 @@
                 <button class="segBtn segBtn--active" data-mark="blue" type="button">I brug</button>
                 <button class="segBtn" data-mark="reserved" type="button">Projekt</button>
                 <button class="segBtn" data-mark="red" type="button">Frigivet</button>
-              </div>
-            </div>
-
-            <div class="toolgroup" id="seriesToolgroup">
-              <span class="toolLabel">Serie:</span>
-              <div class="seg" id="seriesSeg">
-                <button class="segBtn segBtn--active" data-series="0" type="button">0xx</button>
-                <button class="segBtn" data-series="1" type="button">1xx</button>
-                <button class="segBtn" data-series="2" type="button">2xx</button>
-                <button class="segBtn" data-series="3" type="button">3xx</button>
-                <button class="segBtn" data-series="4" type="button">4xx</button>
-                <button class="segBtn" data-series="5" type="button">5xx</button>
-                <button class="segBtn" data-series="6" type="button">6xx</button>
-                <button class="segBtn" data-series="7" type="button">7xx</button>
-                <button class="segBtn" data-series="8" type="button">8xx</button>
-                <button class="segBtn" data-series="9" type="button">9xx</button>
               </div>
             </div>
 

@@ -117,7 +117,7 @@ When this value is not empty, users must log in with initials or email plus a PI
 The app uses three access levels:
 
 - `user` / VIEW: can log in, search, view records, print, and export Excel data. It cannot edit numbers or use JSON backup.
-- `allocator` / PLAN: can do everything VIEW can do, plus add or remove orange `Projekt` reservations on existing records and save those project changes. It cannot create records, edit master data, import, scan, delete, or change blue/red statuses.
+- `allocator` / PLAN: can do everything VIEW can do, plus add or remove orange `Projekt` reservations and save those project changes. It can create a new record only when the selected numbers are orange project reservations. It cannot change blue/red statuses, import, scan, delete, or edit master data on existing records.
 - `admin` / ADMIN: full access. Admin can create records, maintain master data, change all statuses, import Access/Excel/CSV or scan data, export JSON backup, delete records, and manage users.
 
 See [backend/README.md](backend/README.md) for Worker deployment, D1 setup, secrets, migrations, and admin bootstrap instructions.
@@ -135,7 +135,7 @@ The Worker in `backend/src/index.js` provides:
 
 PINs are stored as PBKDF2 hashes with a random salt. Login returns a signed bearer token. Each authenticated request verifies the token and checks that the user still exists and is not disabled.
 
-Read-only record routes require any valid user. Record-changing routes require `allocator` or `admin`, but the backend also enforces that `allocator` users can only change orange project reservations on existing records.
+Read-only record routes require any valid user. Record-changing routes require `allocator` or `admin`, but the backend also enforces that `allocator` users can only change orange project reservations. New allocator-created records must contain at least one orange project reservation.
 
 The current password reset UI is a prototype mail link to the administrator. A production reset flow should add one-time reset tokens and an email provider such as Microsoft Graph, SendGrid, or another approved mail service.
 

@@ -29,12 +29,15 @@ const suffixInputEl = el("suffixInput");
 const suffixSeriesEl = el("suffixSeries");
 const recordListEl = el("recordList");
 const searchEl = el("search");
+const searchResultCountEl = el("searchResultCount");
+const searchModeHintEl = el("searchModeHint");
 
 // Sidebar multi-select + export
 const btnSelectAllVisible = document.getElementById("btnSelectAllVisible");
 const btnSelectNone = document.getElementById("btnSelectNone");
 const btnExportExcelSelected = document.getElementById("btnExportExcelSelected");
 const btnPrintSelected = document.getElementById("btnPrintSelected");
+const btnNewSide = document.getElementById("btnNewSide");
 const selectedRecordCountEl = document.getElementById("selectedRecordCount");
 
 let selectedRecordIds = new Set();
@@ -544,7 +547,8 @@ function canManageUsers(user = getCurrentUser()){
 }
 
 function canCreateRecords(user = getCurrentUser()){
-  return canManageUsers(user);
+  const role = normalizeRole(user?.role);
+  return role === ROLE_ADMIN || role === ROLE_ALLOCATOR;
 }
 
 function canImportData(user = getCurrentUser()){
@@ -730,17 +734,27 @@ function setButtonAccess(id, visible, enabled = visible){
   node.disabled = !enabled;
 }
 
+function updateTopbarGroups(){
+  document.querySelectorAll(".topbar__group:not(.topbar__group--session)").forEach(group => {
+    const hasVisibleButton = Array.from(group.querySelectorAll("button")).some(btn => !btn.hidden);
+    group.hidden = !hasVisibleButton;
+  });
+}
+
 function setEditingEnabled(){
   const user = getCurrentUser();
   const canMark = !!user && canAllocateNumbers(user);
   const admin = !!user && canManageUsers(user);
   const planner = !!user && isPlannerOnly(user);
+  const canCreate = !!user && canCreateRecords(user);
+  const canEditMaster = admin || (planner && !activeId);
 
   // Checkboxes
   getAllCheckboxes().forEach(cb => cb.disabled = !canMark);
 
   setButtonAccess("btnSave", !!user && canSaveRecords(user), !!user && canSaveRecords(user));
-  setButtonAccess("btnNew", admin, admin);
+  setButtonAccess("btnNew", canCreate, canCreate);
+  setButtonAccess("btnNewSide", canCreate, canCreate);
   setButtonAccess("btnOCR", admin && canScanPaper(user), admin && canScanPaper(user));
   setButtonAccess("btnImport", admin && canImportData(user), admin && canImportData(user));
   setButtonAccess("btnExport", admin && canExportBackup(user), admin && canExportBackup(user));
@@ -752,9 +766,9 @@ function setEditingEnabled(){
   if(saveBtn) saveBtn.textContent = planner ? "Gem projekt" : "Gem ændringer";
 
   [fields.desc, fields.plant, fields.pid, fields.sign1, fields.sign2].forEach(field => {
-    if(field) field.readOnly = !admin;
+    if(field) field.readOnly = !canEditMaster;
   });
-  if(fields.main) fields.main.readOnly = !admin;
+  if(fields.main) fields.main.readOnly = !canEditMaster;
 
   document.querySelectorAll("#markSeg .segBtn").forEach(btn => {
     const status = btn.dataset.mark;
@@ -770,6 +784,7 @@ function setEditingEnabled(){
   });
 
   if(planner) setMarkMode(TAG_STATUS.RESERVED);
+  updateTopbarGroups();
 }
 
 
@@ -890,11 +905,6 @@ function buildGrid(gridEl){
       const previousStatus = codeSource[codeKey] ? getMarkForCode(codeKey) : null;
 
       if(isPlannerOnly(user)){
-        if(!activeId){
-          cb.checked = !cb.checked;
-          alert("Planner kan kun reservere projektnumre på en eksisterende post. Åbn først en post fra søgningen.");
-          return;
-        }
         if(previousStatus && previousStatus !== TAG_STATUS.RESERVED){
           cb.checked = !cb.checked;
           alert("Planner kan kun tilføje eller fjerne orange projektnumre. I brug/frigivet ændres af admin.");
@@ -1268,8 +1278,8 @@ function applyCheckChange(codeKey, checked, markOverride=null){
   if(isPlannerOnly(user)){
     const previousStatus = codeSource[codeKey] ? getMarkForCode(codeKey) : null;
     const requestedStatus = normalizeTagStatus(markOverride || currentMark);
-    if(!activeId || (previousStatus && previousStatus !== TAG_STATUS.RESERVED) || requestedStatus !== TAG_STATUS.RESERVED){
-      alert("Planner kan kun tilføje eller fjerne orange projektnumre på en eksisterende post.");
+    if((previousStatus && previousStatus !== TAG_STATUS.RESERVED) || requestedStatus !== TAG_STATUS.RESERVED){
+      alert("Planner kan kun tilføje eller fjerne orange projektnumre.");
       return;
     }
   }
@@ -1328,6 +1338,7 @@ function clearForm(){
   setSelectedCodes([]);
   renderRevisions(null);
   renderRecordList();
+  setEditingEnabled();
   clearDraft();
 }
 
@@ -1710,14 +1721,21 @@ function matchesSearch(rec, q){
 
 function renderRecordList(){
   const q = (searchEl.value || "").trim().toLowerCase();
-  const records = loadRecords().filter(r => matchesSearch(r,q));
+  const allRecords = loadRecords();
+  const records = allRecords.filter(r => matchesSearch(r,q));
+
+  if(searchResultCountEl){
+    const suffix = q ? "match" : "poster";
+    searchResultCountEl.textContent = `${records.length} ${suffix}`;
+  }
 
   recordListEl.innerHTML = "";
   if(records.length === 0){
     const empty = document.createElement("div");
     empty.className = "muted";
-    empty.textContent = "Ingen gemte poster endnu.";
+    empty.textContent = q ? "Ingen poster matcher søgningen." : "Ingen gemte poster endnu.";
     recordListEl.appendChild(empty);
+    updateSelectedRecordCount();
     return;
   }
 
@@ -2533,7 +2551,7 @@ const btnRevClose = document.getElementById("btnRevClose");
 const btnRevSave = document.getElementById("btnRevSave");
 const btnRevCancel = document.getElementById("btnRevCancel");
 const revDescEl = document.getElementById("revDesc");
-const revTbodyEl = document.getElementById("revTbody");
+const revCardsEl = document.getElementById("revCards");
 const revLastSummaryEl = document.getElementById("revLastSummary");
 const revLastChangesEl = document.getElementById("revLastChanges");
 const revisionsDockEl = document.querySelector(".revisionsDock");
@@ -2633,12 +2651,38 @@ function lastRevisionString(rec){
   return parts.join(", ");
 }
 
+function revisionSymbolToStatus(symbol){
+  if(symbol === "🟠") return TAG_STATUS.RESERVED;
+  if(symbol === "🔴") return TAG_STATUS.RELEASED;
+  return TAG_STATUS.ACTIVE;
+}
+
+function revisionChipsHtml(changes){
+  const text = String(changes || "").trim();
+  if(!text) return `<span class="revCard__plain">—</span>`;
+
+  const tokens = [];
+  const re = /(\d{1,10}\.\d{1,3})([🔵🟠🔴])?/gu;
+  let match;
+  while((match = re.exec(text))){
+    tokens.push({ tag: match[1], status: revisionSymbolToStatus(match[2] || "") });
+  }
+
+  if(!tokens.length){
+    return `<div class="revCard__plain">${escapeHtml(text).replace(/\n/g, "<br>")}</div>`;
+  }
+
+  return tokens.map(item =>
+    `<span class="revChip" data-mark="${item.status}">${escapeHtml(item.tag)}</span>`
+  ).join("");
+}
+
 function renderRevisions(rec){
-  if(!revTbodyEl) return;
+  if(!revCardsEl) return;
   const revs = getRevisionsSorted(rec);
 
   if(!revs.length){
-    revTbodyEl.innerHTML = `<tr><td colspan="4" class="muted">Ingen ændringer endnu.</td></tr>`;
+    revCardsEl.innerHTML = `<div class="muted">Ingen ændringer endnu.</div>`;
     if(revLastSummaryEl) revLastSummaryEl.textContent = "—";
     if(revLastChangesEl) revLastChangesEl.textContent = "—";
     return;
@@ -2650,20 +2694,17 @@ function renderRevisions(rec){
     revLastSummaryEl.textContent = parts.join(" · ");
   }
   if(revLastChangesEl){
-    revLastChangesEl.textContent = last.changes ? last.changes : "—";
+    revLastChangesEl.innerHTML = revisionChipsHtml(last.changes);
   }
 
-  const rows = revs.slice(0, 80).map(r => {
-    const ch = (r.changes || "").trim();
-    const chHtml = escapeHtml(ch).replace(/\n/g, "<br>");
-    return `<tr>` +
-      `<td>${escapeHtml(formatRevDate(r.at))}</td>` +
-      `<td>${escapeHtml(r.by || "—")}</td>` +
-      `<td>${escapeHtml(r.desc || "")}</td>` +
-      `<td>${chHtml || "—"}</td>` +
-    `</tr>`;
+  const cards = revs.slice(0, 80).map(r => {
+    return `<article class="revCard">` +
+      `<div class="revCard__top"><span>${escapeHtml(formatRevDate(r.at))}</span><span class="revCard__by">${escapeHtml(r.by || "—")}</span></div>` +
+      `<div class="revCard__desc">${escapeHtml(r.desc || "Ændring")}</div>` +
+      `<div class="revCard__changes">${revisionChipsHtml(r.changes)}</div>` +
+    `</article>`;
   }).join("");
-  revTbodyEl.innerHTML = rows;
+  revCardsEl.innerHTML = cards;
 }
 
 
@@ -2765,7 +2806,16 @@ if(suffixSeriesEl){
 
 function plannerSaveError(prevRec, rec){
   if(!isPlannerOnly()) return "";
-  if(!prevRec) return "Planner kan kun reservere projektnumre på en eksisterende post.";
+  if(!prevRec){
+    const codes = Array.isArray(rec?.selectedCodes) ? rec.selectedCodes.map(String) : [];
+    if(!codes.length) return "Planner skal vælge mindst ét orange projektnummer på en ny post.";
+    for(const code of codes){
+      if(getRecMark(rec, code) !== TAG_STATUS.RESERVED){
+        return `Planner kan kun oprette nye poster med orange projektnumre (${formatOpsaetning(code)} er ikke Projekt).`;
+      }
+    }
+    return "";
+  }
 
   const lockedFields = [
     ["hovedkomponentnr", "Hovedkomponentnr."],
@@ -2808,18 +2858,20 @@ function plannerSaveError(prevRec, rec){
 
 
 // ---------- Buttons ----------
-el("btnNew").addEventListener("click", () => {
-  if(!requireAdmin("Kun admin kan oprette en ny post.")) return;
+function startNewPost(){
+  const user = requireAllocator("Du skal have planner eller admin adgang for at oprette en post.");
+  if(!user) return;
   clearForm();
-});
+  if(isPlannerOnly(user)) setMarkMode(TAG_STATUS.RESERVED);
+  setEditingEnabled();
+}
+
+el("btnNew").addEventListener("click", startNewPost);
+btnNewSide?.addEventListener("click", startNewPost);
 
 el("btnSave").addEventListener("click", async () => {
   const user = requireAllocator("Du skal have planner eller admin adgang for at kunne gemme projektændringer.");
   if(!user) return;
-  if(isPlannerOnly(user) && !activeId){
-    alert("Planner kan kun gemme orange projektnumre på en eksisterende post. Åbn først en post fra søgningen.");
-    return;
-  }
 
   const v = validateSingleMainNumber(fields.main.value);
   if(!v.ok){ alert(v.message); return; }
@@ -2898,6 +2950,7 @@ el("btnSave").addEventListener("click", async () => {
     renderRecordList();
     changeBuffer = [];
     clearDraft();
+    setEditingEnabled();
 
     // Audit: gem-hændelse
     await logAudit({
@@ -3503,6 +3556,7 @@ searchEl.addEventListener("input", renderRecordList);
   const btnLoad = el("btnLoad");
   const title = document.querySelector(".sidebar__title");
   const hint = document.querySelector(".hint");
+  if(searchModeHintEl) searchModeHintEl.textContent = USE_CLOUD ? "Cloud" : "Lokal";
 
   if(USE_CLOUD){
     if(btnSave) btnSave.textContent = "Gem ændringer";

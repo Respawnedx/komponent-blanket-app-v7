@@ -5,7 +5,7 @@ This backend stores shared component records, handles initials/email + PIN login
 ## Access Levels
 
 - `user`: read-only access for searching, viewing, printing, and exporting existing records.
-- `allocator`: planner access. It can only add or remove orange project reservations on existing records. It cannot create records, edit master data, import, OCR, delete, or change blue/red statuses.
+- `allocator`: planner access. It can add or remove orange project reservations and can create new records only when they contain orange project reservations. It cannot edit master data on existing records, import, OCR, delete, or change blue/red statuses.
 - `admin`: full access, including user management, imports, OCR/scan, record creation, status changes, JSON backup, and deletes.
 
 ## Requirements
@@ -149,7 +149,7 @@ Records are stored as structured columns for indexing plus the full JSON payload
 
 `POST /records/upsert` sets server-authoritative `editedBy` and `updatedAt` values before storing the record.
 
-`GET /records` and `GET /records/:id` require any valid logged-in user. `POST /records/upsert` requires `allocator` or `admin`; the server verifies that `allocator` users only change orange project reservations on existing records. `DELETE /records/:id` requires `admin`.
+`GET /records` and `GET /records/:id` require any valid logged-in user. `POST /records/upsert` requires `allocator` or `admin`; the server verifies that `allocator` users only change orange project reservations. New allocator-created records must contain at least one orange project reservation. `DELETE /records/:id` requires `admin`.
 
 ### Audit
 
