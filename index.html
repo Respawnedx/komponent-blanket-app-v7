@@ -250,7 +250,23 @@
 
         </div>
 
+        </div>
+
+        <aside class="rightRail" aria-label="Arbejdsstatus og historik">
         <div class="statusbar">
+          <div class="statusbar__header">
+            <div>
+              <div class="statusbar__title">Arbejdsstatus</div>
+              <div class="statusbar__sub muted">Status, valgte numre og ledige rækker</div>
+            </div>
+          </div>
+
+          <div class="statusbar__selected">
+            <div class="selectedBox" aria-label="Valgte numre">
+              <div id="statusLeft" class="muted">Valgte numre: <span id="selectedCodes">—</span></div>
+            </div>
+          </div>
+
           <div class="statusbar__left">
             <div class="legend">
               <span class="legend__item"><span class="swatch swatch--blue"></span>I brug</span>
@@ -309,13 +325,6 @@
               </div>
             </div>
           </div>
-
-          <div class="statusbar__right">
-            <div class="selectedBox" aria-label="Valgte felter">
-              <div id="statusLeft" class="muted">Valgte felter: <span id="selectedCodes">—</span></div>
-            </div>
-          </div>
-        </div>
         </div>
 
         <aside class="revisionsDock is-compact" aria-label="Revisionslog">
@@ -338,6 +347,7 @@
           </div>
 
           <div class="revisionsDock__hint muted">Tip: Ved <strong>Gem</strong> bliver du bedt om en kort beskrivelse (fx projektnr.).</div>
+        </aside>
         </aside>
       </div>
     </section>

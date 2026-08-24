@@ -596,6 +596,19 @@ body.is-authenticated .authGate{
   min-width:0;
 }
 
+.rightRail{
+  width:440px;
+  flex:0 0 440px;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  min-width:340px;
+  position:sticky;
+  top:80px;
+  max-height:calc(100vh - 102px);
+  overflow:auto;
+}
+
 /* Revisions side panel (outside the paper) */
 .revisionsDock{
   flex: 0 1 420px;
@@ -672,6 +685,21 @@ body.is-authenticated .authGate{
 .revisionsDock.is-compact{
   flex-basis:340px;
   max-width:340px;
+}
+
+.rightRail .revisionsDock{
+  width:100%;
+  max-width:none;
+  min-width:0;
+  flex:none;
+  position:static;
+  top:auto;
+  max-height:none;
+}
+
+.rightRail .revisionsDock.is-compact{
+  flex-basis:auto;
+  max-width:none;
 }
 
 .revisionsDock.is-compact .revisionsDock__timeline,
@@ -978,6 +1006,34 @@ body.is-authenticated .authGate{
   box-shadow:var(--shadow-sm);
 }
 
+.rightRail .statusbar{
+  flex-direction:column;
+  align-items:stretch;
+  padding:16px;
+  gap:12px;
+}
+
+.statusbar__header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.statusbar__title{
+  font-weight:900;
+  color:var(--ink-soft);
+  margin-bottom:4px;
+}
+
+.statusbar__sub{
+  font-size:12.5px;
+}
+
+.statusbar__selected{
+  width:100%;
+}
+
 .statusbar__left{
   flex:1;
   min-width:0;
@@ -987,11 +1043,22 @@ body.is-authenticated .authGate{
   align-items:center;
 }
 
+.rightRail .statusbar__left{
+  align-items:stretch;
+  width:100%;
+}
+
 .statusbar__left > .legend,
 .statusbar__left > .controlBox,
 .statusbar__left > .statusbar__overview{
   width:100%;
   max-width:720px;
+}
+
+.rightRail .statusbar__left > .legend,
+.rightRail .statusbar__left > .controlBox,
+.rightRail .statusbar__left > .statusbar__overview{
+  max-width:none;
 }
 
 .toolbar{ justify-content:center; }
@@ -1002,6 +1069,11 @@ body.is-authenticated .authGate{
   flex-direction:column;
   align-items:stretch;
   gap:8px;
+}
+
+.rightRail .statusbar__right{
+  flex:none;
+  width:100%;
 }
 
 .statusbar__overview{
@@ -1046,6 +1118,14 @@ body.is-authenticated .authGate{
   border-radius:8px;
   padding:10px;
   background:var(--surface-soft);
+}
+
+.rightRail .availBox{
+  max-width:none;
+}
+
+.rightRail .availPills{
+  max-height:72px;
 }
 
 .availTitle{ font-weight:700; }
@@ -1376,6 +1456,16 @@ html:not([data-series="0"]) .grid .item{
     order:1;
   }
 
+  .rightRail{
+    order:2;
+    width:min(860px, calc(100vw - 28px));
+    min-width:0;
+    max-height:none;
+    overflow:visible;
+    position:static;
+    flex:0 1 auto;
+  }
+
   .paper{
     order:1;
   }
@@ -1415,6 +1505,11 @@ html:not([data-series="0"]) .grid .item{
     flex:0 1 auto;
   }
 
+  .rightRail{
+    width:min(860px, calc(100vw - 28px));
+    flex:0 1 auto;
+  }
+
   .paperRow{
     width:100%;
     align-items:center;
@@ -1434,6 +1529,7 @@ html:not([data-series="0"]) .grid .item{
   .paperBody{ display:block; }
   .grid{ column-gap:18px; row-gap:10px; margin-left:18px; }
   .statusbar{ flex-direction:column; }
+  .rightRail .statusbar{ width:100%; }
   .statusbar__right{ flex:0 0 auto; align-items:stretch; width:100%; }
   .statusbar__right .codePills{ justify-content:flex-start; }
   .availBox{ max-width:none; }
@@ -1553,6 +1649,7 @@ html:not([data-series="0"]) .grid .item{
 
   .paper,
   .statusbar,
+  .rightRail,
   .revisionsDock{
     width:100%;
     max-width:100%;

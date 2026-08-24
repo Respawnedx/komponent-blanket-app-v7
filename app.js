@@ -1025,9 +1025,9 @@ function updateSelectedCodes(){
     });
 
   if(!allCodes.length){
-    selectedCodesEl.textContent = "—";
+    selectedCodesEl.textContent = "0 valgt";
   }else if(!codes.length){
-    selectedCodesEl.innerHTML = `<span class="muted">Ingen i filter</span>`;
+    selectedCodesEl.innerHTML = `<span class="muted">Ingen valgte i visningen</span>`;
   }else{
     const pills = codes.map(code => {
       const mark = getMarkForCode(code);
