@@ -1,5 +1,5 @@
 // Cloudflare Worker backend for Komponent-blanket
-// - User management (initials + PIN)
+// - User management (initials/email + password)
 // - Records storage (shared across users)
 // - Audit log per change
 
@@ -37,6 +37,16 @@ function normalizeEmail(value) {
   const raw = String(value || "").trim().toLowerCase();
   if (!raw) return "";
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : "";
+}
+
+function readPasswordSecret(body) {
+  return String(body?.password ?? body?.pin ?? "").trim();
+}
+
+function passwordValidationError(secret) {
+  if (!secret) return "password required";
+  if (secret.length < 4 || secret.length > 64) return "Password must be 4-64 characters";
+  return "";
 }
 
 function normalizeTagStatus(mark) {
@@ -171,10 +181,10 @@ function randomHex(nBytes = 16) {
   return toHex(arr);
 }
 
-async function pbkdf2Hash(pin, saltHex, iterations = 100_000) {
-  const pinKey = await crypto.subtle.importKey(
+async function pbkdf2Hash(secret, saltHex, iterations = 100_000) {
+  const secretKey = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(pin),
+    new TextEncoder().encode(secret),
     { name: "PBKDF2" },
     false,
     ["deriveBits"]
@@ -186,7 +196,7 @@ async function pbkdf2Hash(pin, saltHex, iterations = 100_000) {
       iterations,
       hash: "SHA-256",
     },
-    pinKey,
+    secretKey,
     256
   );
   // store as hex
@@ -332,9 +342,9 @@ export default {
     if (url.pathname === "/auth/login" && request.method === "POST") {
       const body = await readJson(request);
       const login = normalizeLogin(body?.login || body?.initials || body?.email || "");
-      const pin = String(body?.pin || "").trim();
-      if (!login || !pin) {
-        return jsonResponse({ error: "login+pin required" }, origin, allowed, 400);
+      const password = readPasswordSecret(body);
+      if (!login || !password) {
+        return jsonResponse({ error: "login+password required" }, origin, allowed, 400);
       }
 
       const row = login.includes("@")
@@ -349,7 +359,7 @@ export default {
         return jsonResponse({ error: "Unknown user" }, origin, allowed, 401);
       }
 
-      const calc = await pbkdf2Hash(pin, row.pin_salt);
+      const calc = await pbkdf2Hash(password, row.pin_salt);
       if (calc !== row.pin_hash) {
         return jsonResponse({ error: "Bad credentials" }, origin, allowed, 401);
       }
@@ -394,15 +404,16 @@ export default {
       const body = await readJson(request);
       const initials = String(body?.initials || "").trim().toUpperCase();
       const email = normalizeEmail(body?.email || "");
-      const pin = String(body?.pin || "").trim();
+      const password = readPasswordSecret(body);
       const role = normalizeRole(body?.role || "user");
 
-      if (!initials || !pin) return jsonResponse({ error: "initials+pin required" }, origin, allowed, 400);
-      if (!/^\d{4,8}$/.test(pin)) return jsonResponse({ error: "PIN must be 4-8 digits" }, origin, allowed, 400);
+      if (!initials || !password) return jsonResponse({ error: "initials+password required" }, origin, allowed, 400);
+      const passwordError = passwordValidationError(password);
+      if (passwordError) return jsonResponse({ error: passwordError }, origin, allowed, 400);
       if (body?.email && !email) return jsonResponse({ error: "Invalid email" }, origin, allowed, 400);
 
       const salt = randomHex(16);
-      const hash = await pbkdf2Hash(pin, salt);
+      const hash = await pbkdf2Hash(password, salt);
       const ts = nowIso();
 
       await env.DB.prepare(

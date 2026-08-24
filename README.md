@@ -112,7 +112,7 @@ The frontend connects to Cloudflare by setting this value in `index.html`:
 </script>
 ```
 
-When this value is not empty, users must log in with initials or email plus a PIN. Records are stored in D1 and shared across users.
+When this value is not empty, users must log in with initials or email plus an access password. Records are stored in D1 and shared across users.
 
 The app uses three access levels:
 
@@ -126,14 +126,14 @@ See [backend/README.md](backend/README.md) for Worker deployment, D1 setup, secr
 
 The Worker in `backend/src/index.js` provides:
 
-- `POST /auth/login` for initials/email + PIN authentication.
+- `POST /auth/login` for initials/email + password authentication.
 - `GET /auth/me` for checking the current token.
 - `GET /admin/users` and `POST /admin/users` for admin-only user management.
 - `GET /records`, `GET /records/:id`, `POST /records/upsert`, and `DELETE /records/:id` for shared records.
 - `GET /audit` and `POST /audit` for audit history.
 - `GET /health` for a simple health check.
 
-PINs are stored as PBKDF2 hashes with a random salt. Login returns a signed bearer token. Each authenticated request verifies the token and checks that the user still exists and is not disabled.
+Passwords are stored as PBKDF2 hashes with a random salt. Login returns a signed bearer token. Each authenticated request verifies the token and checks that the user still exists and is not disabled.
 
 Read-only record routes require any valid user. Record-changing routes require `allocator` or `admin`, but the backend also enforces that `allocator` users can only change orange project reservations. New allocator-created records must contain at least one orange project reservation.
 

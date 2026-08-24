@@ -367,6 +367,87 @@ function formatChangeItem(tag, mark, pid, showPid){
   return `${tag}${m}${p}`;
 }
 
+function todayDateInputValue(date = new Date()){
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function normalizeDateInputValue(value){
+  const raw = String(value || "").trim();
+  if(!raw) return "";
+  if(/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const m = raw.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
+  if(!m) return "";
+
+  const day = parseInt(m[1], 10);
+  const month = parseInt(m[2], 10);
+  const year = parseInt(m[3], 10);
+  if(!Number.isFinite(day) || !Number.isFinite(month) || !Number.isFinite(year)) return "";
+
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if(d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return "";
+  return `${String(year).padStart(4,"0")}-${pad2(month)}-${pad2(day)}`;
+}
+
+function formatDateValue(value){
+  const normalized = normalizeDateInputValue(value);
+  if(!normalized) return String(value || "").trim();
+  const [year, month, day] = normalized.split("-");
+  return `${day}.${month}.${year}`;
+}
+
+function setDateFieldValue(field, value, fallbackToday = false){
+  if(!field) return;
+  const raw = String(value || "").trim();
+  const normalized = normalizeDateInputValue(raw);
+  if(normalized){
+    field.value = normalized;
+    delete field.dataset.legacyValue;
+    field.removeAttribute("title");
+    return;
+  }
+
+  field.value = fallbackToday ? todayDateInputValue() : "";
+  if(raw){
+    field.dataset.legacyValue = raw;
+    field.title = `Tidligere værdi: ${raw}`;
+  }else{
+    delete field.dataset.legacyValue;
+    field.removeAttribute("title");
+  }
+}
+
+function getDateFieldValue(field){
+  if(!field) return "";
+  return field.value || field.dataset.legacyValue || "";
+}
+
+function transitionLabel(fromMark, toMark){
+  const from = normalizeTagStatus(fromMark);
+  const to = normalizeTagStatus(toMark);
+  if(from === TAG_STATUS.RESERVED && to === TAG_STATUS.RELEASED) return "Projekt frigivet";
+  if(from === TAG_STATUS.RELEASED && to === TAG_STATUS.RESERVED) return "Frigivet tilbage til projekt";
+  if(from === TAG_STATUS.RELEASED && to === TAG_STATUS.ACTIVE) return "Frigivet sat i brug";
+  if(from === TAG_STATUS.ACTIVE && to === TAG_STATUS.RELEASED) return "I brug markeret frigivet";
+  if(to === TAG_STATUS.RELEASED) return "Frigivet";
+  return `Status ændret (${tagStatusLabel(from)} → ${tagStatusLabel(to)})`;
+}
+
+function addedChangeLabel(mark){
+  const status = normalizeTagStatus(mark);
+  if(status === TAG_STATUS.RESERVED) return "Projekt reserveret";
+  if(status === TAG_STATUS.RELEASED) return "Frigivet markeret";
+  return "Sat i brug";
+}
+
+function removedChangeLabel(mark){
+  const status = normalizeTagStatus(mark);
+  if(status === TAG_STATUS.RESERVED) return "Projekt fjernet";
+  if(status === TAG_STATUS.RELEASED) return "Frigivet fjernet";
+  return "I brug fjernet";
+}
+
 function computeTagChanges(prevRec, currRec){
   if(!currRec) return "";
   const main = currRec.hovedkomponentnr || "";
@@ -375,15 +456,25 @@ function computeTagChanges(prevRec, currRec){
   const prevSel = new Set(prevRec?.selectedCodes || []);
   const currSel = new Set(currRec.selectedCodes || []);
 
-  const added = [];
-  const removed = [];
+  const addedByLabel = new Map();
+  const removedByLabel = new Map();
   const changed = [];
+  const changedByLabel = new Map();
+
+  const pushGrouped = (map, label, value) => {
+    if(!map.has(label)) map.set(label, []);
+    map.get(label).push(value);
+  };
+  const pushChanged = (label, value) => {
+    pushGrouped(changedByLabel, label, value);
+  };
 
   // Added & changed
   for(const code of currRec.selectedCodes || []){
     if(!prevSel.has(code)){
       const tag = buildTag(main, code);
-      added.push(formatChangeItem(tag, getRecMark(currRec, code), getRecPid(currRec, code), showPid));
+      const mark = getRecMark(currRec, code);
+      pushGrouped(addedByLabel, addedChangeLabel(mark), formatChangeItem(tag, mark, getRecPid(currRec, code), showPid));
     }else{
       // present in both: check mark/pid changes
       const m0 = getRecMark(prevRec, code);
@@ -395,7 +486,7 @@ function computeTagChanges(prevRec, currRec){
       const parts = [];
 
       if(m0 !== m1){
-        parts.push(`${markSymbol(m0)}→${markSymbol(m1)}`);
+        pushChanged(transitionLabel(m0, m1), `${tag} ${markSymbol(m0)}→${markSymbol(m1)}`);
       }
       if(showPid && (p0 || p1) && (String(p0||"") !== String(p1||""))){
         parts.push(`[${p0||"—"}→${p1||"—"}]`);
@@ -410,18 +501,27 @@ function computeTagChanges(prevRec, currRec){
   for(const code of (prevRec?.selectedCodes || [])){
     if(!currSel.has(code)){
       const tag = buildTag(main, code);
-      removed.push(formatChangeItem(tag, getRecMark(prevRec, code), getRecPid(prevRec, code), showPid));
+      const mark = getRecMark(prevRec, code);
+      pushGrouped(removedByLabel, removedChangeLabel(mark), formatChangeItem(tag, mark, getRecPid(prevRec, code), showPid));
     }
   }
 
   if(!prevRec){
-    if(!added.length) return "Oprettet (ingen tags valgt).";
-    return `Oprettet\nTilføjet: ${added.join(", ")}`;
+    const addedLines = [...addedByLabel.entries()].map(([label, items]) => `${label}: ${items.join(", ")}`);
+    if(!addedLines.length) return "Oprettet (ingen tags valgt).";
+    return `Oprettet\n${addedLines.join("\n")}`;
   }
 
   const lines = [];
-  if(added.length) lines.push(`Tilføjet: ${added.join(", ")}`);
-  if(removed.length) lines.push(`Fjernet: ${removed.join(", ")}`);
+  for(const [label, items] of addedByLabel.entries()){
+    lines.push(`${label}: ${items.join(", ")}`);
+  }
+  for(const [label, items] of removedByLabel.entries()){
+    lines.push(`${label}: ${items.join(", ")}`);
+  }
+  for(const [label, items] of changedByLabel.entries()){
+    lines.push(`${label}: ${items.join(", ")}`);
+  }
   if(changed.length) lines.push(`Ændret: ${changed.join(", ")}`);
   if(!lines.length) return "Ingen tag-ændringer.";
   return lines.join("\n");
@@ -640,7 +740,7 @@ async function cloudLogin(login, pin){
   return apiFetch("/auth/login", {
     method: "POST",
     noAuth: true,
-    body: JSON.stringify({ login, initials: login, pin }),
+    body: JSON.stringify({ login, initials: login, password: pin, pin }),
   });
 }
 
@@ -651,8 +751,12 @@ async function cloudMe(){
 async function cloudCreateUser(initials, pin, role="user", email=""){
   return apiFetch("/admin/users", {
     method: "POST",
-    body: JSON.stringify({ initials, pin, role: normalizeRole(role), email }),
+    body: JSON.stringify({ initials, password: pin, pin, role: normalizeRole(role), email }),
   });
+}
+
+async function cloudListUsers(){
+  return apiFetch("/admin/users", { method: "GET" });
 }
 
 function requireLogin(reason = "Du skal være logget ind for at kunne redigere."){
@@ -1334,7 +1438,7 @@ function clearForm(){
   fields.pid.value = "";
   refreshPidOptionsFromField();
   fields.sign1.value = "";
-  fields.sign2.value = "";
+  setDateFieldValue(fields.sign2, "", true);
   setSelectedCodes([]);
   renderRevisions(null);
   renderRecordList();
@@ -1354,7 +1458,7 @@ function getFormData(){
     anlaeg: fields.plant.value.trim(),
     pid: fields.pid.value.trim(),
     signatur1: fields.sign1.value.trim(),
-    signatur2: fields.sign2.value.trim(),
+    signatur2: getDateFieldValue(fields.sign2).trim(),
     selectedCodes: getSelectedCodes(),
     codeSources: {...codeSource},          // per code: scan/manual
     codeMeta: {},                          // filled below
@@ -1427,7 +1531,7 @@ function setFormData(rec){
   fields.pid.value = rec.pid ?? "";
   refreshPidOptionsFromField();
   fields.sign1.value = rec.signatur1 ?? "";
-  fields.sign2.value = rec.signatur2 ?? "";
+  setDateFieldValue(fields.sign2, rec.signatur2 ?? "");
 
   const selected = Array.isArray(rec.selectedCodes) ? rec.selectedCodes.map(String) : [];
 
@@ -1619,7 +1723,7 @@ function saveDraft(reason = "edit"){
       plant: fields.plant?.value || "",
       pid: fields.pid?.value || "",
       sign1: fields.sign1?.value || "",
-      sign2: fields.sign2?.value || "",
+      sign2: getDateFieldValue(fields.sign2),
     },
     codeSource: { ...codeSource },
     codeMeta: { ...codeMeta },
@@ -1655,7 +1759,7 @@ function restoreDraft(draft){
   fields.plant.value = f.plant || "";
   fields.pid.value = f.pid || "";
   fields.sign1.value = f.sign1 || "";
-  fields.sign2.value = f.sign2 || "";
+  setDateFieldValue(fields.sign2, f.sign2 || "");
 
   currentPidIdx = Number.isFinite(parseInt(draft.currentPidIdx, 10)) ? parseInt(draft.currentPidIdx, 10) : 0;
   refreshPidOptionsFromField();
@@ -2420,9 +2524,13 @@ const gateLoginInitials = document.getElementById("gateLoginInitials");
 const gateLoginPin = document.getElementById("gateLoginPin");
 const gateLoginError = document.getElementById("gateLoginError");
 const btnGateLogin = document.getElementById("btnGateLogin");
+const btnGateTogglePassword = document.getElementById("btnGateTogglePassword");
 
 function setGateError(message = ""){
   if(gateLoginError) gateLoginError.textContent = message;
+  [gateLoginInitials, gateLoginPin].forEach(input => {
+    input?.setAttribute("aria-invalid", message ? "true" : "false");
+  });
 }
 
 function openLogin(){
@@ -2464,8 +2572,8 @@ async function performLogin(loginValue, pin, options = {}){
   setGateError("");
 
   if(USE_CLOUD){
-    if(!/^\d{4,8}$/.test(pin)){
-      const msg = "PIN skal være 4-8 cifre.";
+    if(!pin || pin.length < 4 || pin.length > 64){
+      const msg = "Adgangskoden skal være 4-64 tegn.";
       if(showInlineError) setGateError(msg);
       else alert(msg);
       return false;
@@ -2542,6 +2650,15 @@ if(gateLoginForm){
 
 [gateLoginInitials, gateLoginPin].forEach(input => {
   input?.addEventListener("input", () => setGateError(""));
+});
+
+btnGateTogglePassword?.addEventListener("click", () => {
+  if(!gateLoginPin) return;
+  const isPassword = gateLoginPin.type === "password";
+  gateLoginPin.type = isPassword ? "text" : "password";
+  btnGateTogglePassword.textContent = isPassword ? "Skjul" : "Vis";
+  btnGateTogglePassword.setAttribute("aria-pressed", isPassword ? "true" : "false");
+  gateLoginPin.focus();
 });
 
 
@@ -2708,33 +2825,116 @@ function renderRevisions(rec){
 }
 
 
-// Admin: create user
+// Admin: user management
 const btnAdminCreateUser = document.getElementById("btnAdminCreateUser");
-if(btnAdminCreateUser){
-  btnAdminCreateUser.addEventListener("click", async () => {
-    const user = getCurrentUser();
-    if(!user || !canManageUsers(user)){
-      alert("Kun admin kan oprette brugere.");
-      return;
-    }
-    const initials = prompt("Initialer på ny bruger (fx AB):", "")?.trim().toUpperCase();
-    if(!initials) return;
+const adminUsersModal = document.getElementById("adminUsersModal");
+const btnAdminUsersClose = document.getElementById("btnAdminUsersClose");
+const btnAdminUsersRefresh = document.getElementById("btnAdminUsersRefresh");
+const adminUsersList = document.getElementById("adminUsersList");
+const adminUsersMessage = document.getElementById("adminUsersMessage");
+const adminUserForm = document.getElementById("adminUserForm");
+const adminUserInitials = document.getElementById("adminUserInitials");
+const adminUserEmail = document.getElementById("adminUserEmail");
+const adminUserRole = document.getElementById("adminUserRole");
+const adminUserPassword = document.getElementById("adminUserPassword");
 
-    const email = prompt("Email til brugeren (valgfri, fx navn@arlafoods.com):", "")?.trim().toLowerCase() || "";
-
-    const pin = prompt("PIN (4-8 cifre) til brugeren:", "")?.trim();
-    if(!pin) return;
-
-    const role = normalizeRole(prompt("Rolle (user/planner/admin):", "user") || "user");
-
-    try{
-      await cloudCreateUser(initials, pin, role, email);
-      alert(`Bruger ${initials} oprettet/opdateret (${roleLabel(role)}).`);
-    }catch(err){
-      alert("Kunne ikke oprette bruger: " + (err?.message ?? err));
-    }
-  });
+function setAdminUsersMessage(message = "", tone = "error"){
+  if(!adminUsersMessage) return;
+  adminUsersMessage.textContent = message;
+  adminUsersMessage.dataset.tone = tone;
 }
+
+function closeAdminUsersModal(){
+  adminUsersModal?.setAttribute("aria-hidden", "true");
+  setAdminUsersMessage("");
+}
+
+function adminUserRowHtml(user){
+  const role = normalizeRole(user?.role);
+  const created = user?.created_at ? formatRevDate(user.created_at) : "—";
+  const disabled = user?.disabled ? " · deaktiveret" : "";
+  return `
+    <article class="adminUserRow">
+      <div class="adminUserRow__main">
+        <strong>${escapeHtml(user?.initials || "—")}</strong>
+        <span>${escapeHtml(user?.email || "Ingen email")}</span>
+      </div>
+      <div class="adminUserRow__meta">
+        <span class="rolePill" data-role="${role}">${escapeHtml(roleLabel(role))}${disabled}</span>
+        <span>Oprettet ${escapeHtml(created)}</span>
+        <span>Af ${escapeHtml(user?.created_by || "—")}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderAdminUsers(users){
+  if(!adminUsersList) return;
+  const list = Array.isArray(users) ? users : [];
+  if(!list.length){
+    adminUsersList.innerHTML = `<div class="muted">Ingen brugere fundet.</div>`;
+    return;
+  }
+  adminUsersList.innerHTML = list.map(adminUserRowHtml).join("");
+}
+
+async function refreshAdminUsers(){
+  if(!adminUsersList) return;
+  adminUsersList.innerHTML = `<div class="muted">Indlæser brugere...</div>`;
+  setAdminUsersMessage("");
+  try{
+    const data = await cloudListUsers();
+    renderAdminUsers(data?.users || []);
+  }catch(err){
+    adminUsersList.innerHTML = `<div class="muted">Kunne ikke hente brugere.</div>`;
+    setAdminUsersMessage("Kunne ikke hente brugere: " + (err?.message ?? err));
+  }
+}
+
+async function openAdminUsersModal(){
+  const user = requireAdmin("Kun admin kan administrere brugere.");
+  if(!user) return;
+  adminUsersModal?.setAttribute("aria-hidden", "false");
+  await refreshAdminUsers();
+}
+
+btnAdminCreateUser?.addEventListener("click", openAdminUsersModal);
+btnAdminUsersClose?.addEventListener("click", closeAdminUsersModal);
+btnAdminUsersRefresh?.addEventListener("click", refreshAdminUsers);
+adminUsersModal?.querySelector(".modal__backdrop")?.addEventListener("click", closeAdminUsersModal);
+
+adminUserForm?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const user = requireAdmin("Kun admin kan administrere brugere.");
+  if(!user) return;
+
+  const initials = (adminUserInitials?.value || "").trim().toUpperCase();
+  const email = (adminUserEmail?.value || "").trim().toLowerCase();
+  const role = normalizeRole(adminUserRole?.value || ROLE_USER);
+  const password = (adminUserPassword?.value || "").trim();
+
+  if(!initials){
+    setAdminUsersMessage("Skriv initialer på brugeren.");
+    return;
+  }
+  if(password.length < 4 || password.length > 64){
+    setAdminUsersMessage("Adgangskoden skal være 4-64 tegn.");
+    return;
+  }
+
+  try{
+    setAdminUsersMessage("Gemmer bruger...", "info");
+    await cloudCreateUser(initials, password, role, email);
+    if(adminUserPassword) adminUserPassword.value = "";
+    if(adminUserInitials) adminUserInitials.value = "";
+    if(adminUserEmail) adminUserEmail.value = "";
+    if(adminUserRole) adminUserRole.value = ROLE_USER;
+    await refreshAdminUsers();
+    setAdminUsersMessage(`Bruger ${initials} er gemt som ${roleLabel(role)}.`, "success");
+  }catch(err){
+    setAdminUsersMessage("Kunne ikke gemme bruger: " + (err?.message ?? err));
+  }
+});
 
 // ---------- Mark/Serie/Filter UI ----------
 const markSeg = document.getElementById("markSeg");
@@ -2859,7 +3059,7 @@ function plannerSaveError(prevRec, rec){
 
 // ---------- Buttons ----------
 function startNewPost(){
-  const user = requireAllocator("Du skal have planner eller admin adgang for at oprette en post.");
+  const user = requireAllocator("Du skal have planner eller admin adgang for at oprette et hovednummer.");
   if(!user) return;
   clearForm();
   if(isPlannerOnly(user)) setMarkMode(TAG_STATUS.RESERVED);
@@ -2995,7 +3195,7 @@ function exportExcelFromCurrent(){
   const desc = (fields.desc.value || "").trim();
   const plant = (fields.plant.value || "").trim();
   const pid = (fields.pid.value || "").trim();
-  const signHeader = [ (fields.sign1.value||"").trim(), (fields.sign2.value||"").trim() ].filter(Boolean).join("; ");
+  const signHeader = [ (fields.sign1.value||"").trim(), formatDateValue(getDateFieldValue(fields.sign2)) ].filter(Boolean).join("; ");
   const revStr = activeId ? (lastRevisionString(loadRecords().find(r => r.id === activeId) || null) || "") : "";
 
   const codes = getSelectedCodes();
@@ -3187,7 +3387,7 @@ function buildPaperForPrint(rec, series){
   setVal('#fPlant', rec?.anlaeg ?? '');
   setVal('#fPid', rec?.pid ?? '');
   setVal('#fSign1', rec?.signatur1 ?? '');
-  setVal('#fSign2', rec?.signatur2 ?? '');
+  setVal('#fSign2', normalizeDateInputValue(rec?.signatur2 ?? '') || '');
 
   // Series-specific layout tweaks
   if(series !== 0){
@@ -3383,7 +3583,7 @@ function rowsFromRecordForExcel(rec){
   const desc = String(rec?.beskrivelse || "").trim();
   const plant = String(rec?.anlaeg || "").trim();
   const pid = String(rec?.pid || "").trim();
-  const signHeader = [ String(rec?.signatur1 || "").trim(), String(rec?.signatur2 || "").trim() ].filter(Boolean).join("; ");
+  const signHeader = [ String(rec?.signatur1 || "").trim(), formatDateValue(rec?.signatur2 || "") ].filter(Boolean).join("; ");
 
   const codes = Array.isArray(rec?.selectedCodes) ? rec.selectedCodes.map(String) : [];
   codes.sort((a,b)=>parseInt(a,10)-parseInt(b,10));

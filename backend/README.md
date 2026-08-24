@@ -1,6 +1,6 @@
 # Backend: Cloudflare Workers + D1
 
-This backend stores shared component records, handles initials/email + PIN login, manages users, and writes audit events.
+This backend stores shared component records, handles initials/email + password login, manages users, and writes audit events.
 
 ## Access Levels
 
@@ -90,7 +90,7 @@ Use the bootstrap helper:
 node bootstrap-admin.js AB 5678 ab@arlafoods.com
 ```
 
-The script prints SQL that inserts an admin user with a hashed PIN. Run that SQL in the Cloudflare D1 console or with `wrangler d1 execute`.
+The script prints SQL that inserts an admin user with a hashed password. Run that SQL in the Cloudflare D1 console or with `wrangler d1 execute`.
 
 After that, log in as the admin user in the app and use **Brugere** to create or update users.
 
@@ -112,11 +112,11 @@ Login accepts:
 ```json
 {
   "login": "ab@arlafoods.com",
-  "pin": "5678"
+  "password": "5678"
 }
 ```
 
-It also accepts `"initials": "AB"` for the same endpoint. The response returns a bearer token plus the user initials, email, and role.
+It also accepts `"initials": "AB"` for the same endpoint and still accepts the legacy `"pin"` property for prototype/demo users. The response returns a bearer token plus the user initials, email, and role.
 
 ### Admin Users
 
@@ -131,12 +131,12 @@ Create or update a user:
 {
   "initials": "AB",
   "email": "ab@arlafoods.com",
-  "pin": "5678",
+  "password": "5678",
   "role": "allocator"
 }
 ```
 
-PINs must be 4-8 digits. Accepted roles are `user`, `allocator`, `planner`, and `admin`. The aliases `planner`, `semi-admin`, `semi_admin`, and `editor` are normalized to `allocator`.
+Passwords must be 4-64 characters. The legacy `pin` property is also accepted. Accepted roles are `user`, `allocator`, `planner`, and `admin`. The aliases `planner`, `semi-admin`, `semi_admin`, and `editor` are normalized to `allocator`.
 
 ### Records
 
@@ -163,7 +163,7 @@ Writing audit rows through `POST /audit` requires `allocator` or `admin`.
 
 ## Security Notes
 
-- PINs are hashed with PBKDF2 and a random salt.
+- Passwords are hashed with PBKDF2 and a random salt.
 - Tokens are signed with `TOKEN_SECRET`.
 - Every protected route verifies the token and checks that the user still exists and is not disabled.
 - CORS is controlled by `ALLOWED_ORIGINS`; add local development origins there when testing.

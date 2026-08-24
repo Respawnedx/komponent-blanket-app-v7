@@ -353,6 +353,19 @@ body{
   gap:6px;
 }
 
+.authPasswordRow{
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) auto;
+  gap:8px;
+  align-items:center;
+}
+
+.authPasswordToggle{
+  min-width:72px;
+  justify-content:center;
+  min-height:40px;
+}
+
 .authCard__submit{
   width:100%;
   justify-content:center;
@@ -401,6 +414,18 @@ body{
 
 .authError:not(:empty){
   display:block;
+}
+
+.authError[data-tone="success"]{
+  border-color:rgba(0,122,61,.28);
+  color:var(--accent-strong);
+  background:#ecfdf3;
+}
+
+.authError[data-tone="info"]{
+  border-color:rgba(25,79,120,.25);
+  color:#194f78;
+  background:#eff6ff;
 }
 
 body:not(.is-authenticated) .workspace,
@@ -557,6 +582,13 @@ body.is-authenticated .authGate{
   background:var(--surface-soft);
 }
 .listTools__row{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.listTools__row--actions .btn{
+  flex:1 1 0;
+  justify-content:center;
+}
+.listTools__countRow{
+  min-height:16px;
+}
 .listTools__count{font-size:12px}
 
 .paperWrap{
@@ -1866,14 +1898,152 @@ html:not([data-series="0"]) .grid .item{
   box-shadow: 0 30px 90px rgba(0,0,0,.25);
   overflow:hidden;
 }
+.modal__panel--wide{
+  width:min(980px, calc(100vw - 24px));
+}
 .modal__header{
   display:flex; align-items:center; justify-content:space-between;
   padding:12px 14px;
   border-bottom:1px solid var(--line2);
 }
 .modal__title{font-weight:900}
+.modal__sub{
+  margin-top:3px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+  line-height:1.35;
+}
 .modal__body{padding:14px}
 .modal__label{display:block; font-weight:800; margin:10px 0 6px}
 .modal__footer{display:flex; gap:10px; justify-content:flex-end; margin-top:14px}
 .row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px}
 .check{display:inline-flex; align-items:center; gap:8px; font-weight:800}
+
+.adminUsersLayout{
+  display:grid;
+  grid-template-columns:minmax(0, 1.35fr) minmax(280px, .85fr);
+  gap:14px;
+}
+
+.adminUsersCard,
+.adminUserForm{
+  border:1px solid var(--line2);
+  border-radius:8px;
+  background:var(--surface-soft);
+  padding:12px;
+}
+
+.adminUsersCard__header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+}
+
+.adminUsersCard__header strong,
+.adminUserForm strong{
+  display:block;
+  color:var(--ink-soft);
+  font-size:15px;
+}
+
+.adminUsersCard__header span{
+  display:block;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+  margin-top:2px;
+}
+
+.adminUsersList{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  max-height:min(58vh, 560px);
+  overflow:auto;
+}
+
+.adminUserRow{
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) auto;
+  gap:12px;
+  align-items:center;
+  padding:10px;
+  border:1px solid var(--line2);
+  border-radius:8px;
+  background:#fff;
+}
+
+.adminUserRow__main{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+
+.adminUserRow__main strong{
+  font-size:15px;
+  color:var(--ink);
+}
+
+.adminUserRow__main span,
+.adminUserRow__meta span{
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+}
+
+.adminUserRow__meta{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  align-items:center;
+  gap:6px;
+}
+
+.rolePill{
+  display:inline-flex;
+  align-items:center;
+  border:1px solid var(--line2);
+  border-radius:999px;
+  padding:3px 8px;
+  background:#fff;
+  color:var(--ink-soft) !important;
+  text-transform:uppercase;
+}
+
+.rolePill[data-role="allocator"]{
+  border-color:rgba(245,158,11,.35);
+  background:#fff7ed;
+  color:#92400e !important;
+}
+
+.rolePill[data-role="admin"]{
+  border-color:rgba(0,122,61,.28);
+  background:#ecfdf3;
+  color:var(--accent-strong) !important;
+}
+
+.adminUserForm{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+
+@media (max-width: 760px){
+  .modal__panel{
+    margin:24px auto;
+    max-height:calc(100vh - 48px);
+    overflow:auto;
+  }
+
+  .adminUsersLayout,
+  .adminUserRow{
+    grid-template-columns:1fr;
+  }
+
+  .adminUserRow__meta{
+    justify-content:flex-start;
+  }
+}

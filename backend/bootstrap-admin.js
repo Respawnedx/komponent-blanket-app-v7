@@ -1,24 +1,24 @@
-// Usage: node bootstrap-admin.js <INITIALS> <PIN> [EMAIL]
+// Usage: node bootstrap-admin.js <INITIALS> <PASSWORD> [EMAIL]
 // Prints SQL to insert/update an admin user in D1.
 
 const crypto = require('crypto');
 
 const initials = (process.argv[2] || '').trim().toUpperCase();
-const pin = (process.argv[3] || '').trim();
+const password = (process.argv[3] || '').trim();
 const email = (process.argv[4] || '').trim().toLowerCase();
 
-if (!initials || !pin) {
-  console.error('Usage: node bootstrap-admin.js <INITIALS> <PIN>');
+if (!initials || !password) {
+  console.error('Usage: node bootstrap-admin.js <INITIALS> <PASSWORD>');
   process.exit(1);
 }
-if (!/^\d{4,8}$/.test(pin)) {
-  console.error('PIN must be 4-8 digits');
+if (password.length < 4 || password.length > 64) {
+  console.error('Password must be 4-64 characters');
   process.exit(1);
 }
 
 const iterations = 100000;
 const salt = crypto.randomBytes(16);
-const hash = crypto.pbkdf2Sync(pin, salt, iterations, 32, 'sha256');
+const hash = crypto.pbkdf2Sync(password, salt, iterations, 32, 'sha256');
 
 const saltHex = salt.toString('hex');
 const hashHex = hash.toString('hex');

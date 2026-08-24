@@ -29,7 +29,7 @@
       </div>
       <div class="topbar__group" id="topbarPostGroup">
         <span class="topbar__groupLabel">Post</span>
-        <button id="btnNew" class="btn">Ny post</button>
+        <button id="btnNew" class="btn">Opret hovednr.</button>
         <button id="btnSave" class="btn btn--primary">Gem ændringer</button>
       </div>
       <div class="topbar__group" id="topbarDataGroup">
@@ -54,7 +54,7 @@
       </div>
 
       <section class="authCard">
-        <form id="gateLoginForm" class="authCard__form" autocomplete="on">
+        <form id="gateLoginForm" class="authCard__form" autocomplete="on" method="post">
           <div>
           <p class="authKicker">Arla Foods Ingredients</p>
           <h2 class="authCard__title">Log ind</h2>
@@ -63,10 +63,13 @@
 
         <div class="authCard__fields">
           <label class="modal__label" for="gateLoginInitials">Email eller initialer</label>
-          <input id="gateLoginInitials" class="input" name="username" placeholder="NJ eller navn@arlafoods.com" autocomplete="username" autocapitalize="characters" spellcheck="false" required />
+          <input id="gateLoginInitials" class="input" name="username" type="text" placeholder="NJ eller navn@arlafoods.com" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="128" enterkeyhint="next" required />
 
-          <label class="modal__label" for="gateLoginPin">PIN</label>
-          <input id="gateLoginPin" class="input" name="password" type="password" placeholder="••••" autocomplete="current-password" inputmode="numeric" required />
+          <label class="modal__label" for="gateLoginPin">Adgangskode</label>
+          <div class="authPasswordRow">
+            <input id="gateLoginPin" class="input" name="password" type="password" placeholder="Adgangskode" autocomplete="current-password" minlength="4" maxlength="64" enterkeyhint="go" required />
+            <button id="btnGateTogglePassword" class="btn authPasswordToggle" type="button" aria-controls="gateLoginPin" aria-pressed="false">Vis</button>
+          </div>
         </div>
 
         <div id="gateLoginError" class="authError" role="alert" aria-live="polite"></div>
@@ -74,7 +77,7 @@
           <button class="btn btn--primary authCard__submit" id="btnGateLogin" type="submit">Åbn Komponentdatabase</button>
 
           <div class="authCard__links">
-            <a id="gateForgotPin" href="mailto:nijey@arlafoods.com?subject=Komponentdatabase%20-%20nulstil%20PIN&body=Hej%20NJ%2C%0A%0AJeg%20vil%20gerne%20have%20nulstillet%20min%20PIN%20til%20Komponentdatabase.%0A%0AInitialer%2Femail%3A%20">Glemt PIN?</a>
+            <a id="gateForgotPin" href="mailto:nijey@arlafoods.com?subject=Komponentdatabase%20-%20nulstil%20adgangskode&body=Hej%20NJ%2C%0A%0AJeg%20vil%20gerne%20have%20nulstillet%20min%20adgangskode%20til%20Komponentdatabase.%0A%0AInitialer%2Femail%3A%20">Glemt adgangskode?</a>
             <a href="mailto:nijey@arlafoods.com?subject=Komponentdatabase%20-%20brugeroprettelse&body=Hej%20NJ%2C%0A%0AJeg%20vil%20gerne%20oprettes%20i%20Komponentdatabase.%0A%0ANavn%3A%20%0AInitialer%3A%20%0AEmail%3A%20">Ikke oprettet? Kontakt en administrator.</a>
           </div>
         </form>
@@ -91,7 +94,7 @@
               <div class="sidebar__title">Søg</div>
               <div class="searchPanel__sub muted">Find post, PID eller fuldt tag</div>
             </div>
-            <button id="btnNewSide" class="btn btn--primary btn--sm" type="button">Ny post</button>
+            <button id="btnNewSide" class="btn btn--primary btn--sm" type="button">Opret hovednr.</button>
           </div>
           <div class="searchPanel__box">
             <input id="search" class="input searchInput" placeholder="Søg hovednr., tag, anlæg, PID..." />
@@ -107,15 +110,11 @@
             <button id="btnSelectAllVisible" class="btn btn--sm" type="button">Markér alle</button>
             <button id="btnSelectNone" class="btn btn--sm" type="button">Nulstil</button>
           </div>
-          <div class="listTools__row">
-            <button id="btnExportExcelSelected" class="btn btn--sm btn--primary" type="button">Eksportér Excel (valgte)</button>
-            <span id="selectedRecordCount" class="muted listTools__count">0 valgt</span>
+          <div class="listTools__row listTools__row--actions">
+            <button id="btnPrintSelected" class="btn btn--sm btn--primary" type="button">Print / PDF</button>
+            <button id="btnExportExcelSelected" class="btn btn--sm btn--primary" type="button">Eksportér Excel</button>
           </div>
-
-          
-          <div class="listTools__row">
-            <button id="btnPrintSelected" class="btn btn--sm" type="button">Print (valgte)</button>
-          </div>
+          <div class="listTools__countRow"><span id="selectedRecordCount" class="muted listTools__count">0 valgt</span></div>
         </div>
 
         <div id="recordList" class="recordList"></div>
@@ -155,8 +154,8 @@
                 <input id="fSign1" class="field field--sig" placeholder="NJ" />
               </label>
               <label class="signatureField signatureField--year">
-                <span>Årgang</span>
-                <input id="fSign2" class="field field--sig field--year" inputmode="numeric" placeholder="2026" />
+                <span>Dato</span>
+                <input id="fSign2" class="field field--sig field--year" type="date" autocomplete="off" />
               </label>
             </div>
           </div>
@@ -368,21 +367,80 @@
       </div>
 
       <div class="modal__body">
-        <form id="loginForm" autocomplete="on">
+        <form id="loginForm" autocomplete="on" method="post">
         <label class="modal__label" for="loginInitials">Email eller initialer</label>
-        <input id="loginInitials" class="input" name="username" placeholder="NJ eller navn@arlafoods.com" autocomplete="username" autocapitalize="characters" spellcheck="false" />
+        <input id="loginInitials" class="input" name="username" type="text" placeholder="NJ eller navn@arlafoods.com" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="128" enterkeyhint="next" />
 
-        <label class="modal__label" for="loginPin">PIN (4-8 cifre)</label>
-        <input id="loginPin" class="input" name="password" type="password" placeholder="••••" autocomplete="current-password" inputmode="numeric" />
+        <label class="modal__label" for="loginPin">Adgangskode</label>
+        <input id="loginPin" class="input" name="password" type="password" placeholder="Adgangskode" autocomplete="current-password" minlength="4" maxlength="64" enterkeyhint="go" />
 
         <div class="modal__footer">
           <button class="btn btn--primary" id="btnLoginSave" type="submit">Log ind</button>
           <button class="btn" id="btnLogout" type="button">Log ud</button>
         </div>
         <div class="modal__links">
-          <a href="mailto:nijey@arlafoods.com?subject=Komponentdatabase%20-%20nulstil%20PIN&body=Hej%20NJ%2C%0A%0AJeg%20vil%20gerne%20have%20nulstillet%20min%20PIN%20til%20Komponentdatabase.%0A%0AInitialer%2Femail%3A%20">Glemt PIN?</a>
+          <a href="mailto:nijey@arlafoods.com?subject=Komponentdatabase%20-%20nulstil%20adgangskode&body=Hej%20NJ%2C%0A%0AJeg%20vil%20gerne%20have%20nulstillet%20min%20adgangskode%20til%20Komponentdatabase.%0A%0AInitialer%2Femail%3A%20">Glemt adgangskode?</a>
         </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="adminUsersModal" class="modal" aria-hidden="true">
+    <div class="modal__backdrop" data-close="1"></div>
+    <div class="modal__panel modal__panel--wide" role="dialog" aria-modal="true" aria-labelledby="adminUsersTitle">
+      <div class="modal__header">
+        <div>
+          <div id="adminUsersTitle" class="modal__title">Brugere og rettigheder</div>
+          <div class="modal__sub">Opret testbrugere og se hvem der har visning, planner eller admin.</div>
+        </div>
+        <button class="btn" id="btnAdminUsersClose" type="button">Luk</button>
+      </div>
+
+      <div class="modal__body">
+        <div id="adminUsersMessage" class="authError" role="alert" aria-live="polite"></div>
+
+        <div class="adminUsersLayout">
+          <section class="adminUsersCard" aria-label="Brugerliste">
+            <div class="adminUsersCard__header">
+              <div>
+                <strong>Brugerliste</strong>
+                <span>Rettigheder hentes fra Cloudflare D1.</span>
+              </div>
+              <button id="btnAdminUsersRefresh" class="btn btn--sm" type="button">Opdater</button>
+            </div>
+            <div id="adminUsersList" class="adminUsersList">
+              <div class="muted">Indlæser brugere...</div>
+            </div>
+          </section>
+
+          <form id="adminUserForm" class="adminUserForm" autocomplete="off">
+            <div>
+              <strong>Opret eller opdater bruger</strong>
+              <p class="modal__sub">Initialer er den faste bruger-id. Email kan bruges til login.</p>
+            </div>
+
+            <label class="modal__label" for="adminUserInitials">Initialer</label>
+            <input id="adminUserInitials" class="input" name="admin-user-initials" type="text" placeholder="AB" autocomplete="off" maxlength="12" required />
+
+            <label class="modal__label" for="adminUserEmail">Email</label>
+            <input id="adminUserEmail" class="input" name="admin-user-email" type="email" placeholder="navn@arlafoods.com" autocomplete="off" maxlength="128" />
+
+            <label class="modal__label" for="adminUserRole">Rettighed</label>
+            <select id="adminUserRole" class="input" name="admin-user-role" autocomplete="off">
+              <option value="user">VIEW · visning</option>
+              <option value="allocator">PLAN · planner</option>
+              <option value="admin">ADMIN · fuld adgang</option>
+            </select>
+
+            <label class="modal__label" for="adminUserPassword">Midlertidig adgangskode</label>
+            <input id="adminUserPassword" class="input" name="new-password" type="password" placeholder="Mindst 4 tegn" autocomplete="new-password" minlength="4" maxlength="64" required />
+
+            <div class="modal__footer">
+              <button class="btn btn--primary" id="btnAdminUserCreate" type="submit">Gem bruger</button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   </div>
