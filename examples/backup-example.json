@@ -1,0 +1,47 @@
+{
+  "schema": "komponentdatabase.backup.v2",
+  "exportedAt": "2026-08-25T10:15:30.000Z",
+  "source": "cloud",
+  "exportedBy": "NJ",
+  "count": 1,
+  "records": [
+    {
+      "id": "example-record-1400",
+      "hovedkomponentnr": "1400",
+      "beskrivelse": "Luftudskiller",
+      "anlaeg": "Isvand 3",
+      "pid": "1756;1785",
+      "signatur1": "NJ",
+      "signatur2": "2026-08-25",
+      "selectedCodes": ["34", "210"],
+      "codeSources": {
+        "34": "manual",
+        "210": "manual"
+      },
+      "codeMeta": {
+        "34": {
+          "by": "NJ",
+          "at": "2026-08-25T10:15:30.000Z",
+          "source": "manual",
+          "mark": "blue",
+          "pid": "1756",
+          "pidIdx": 0,
+          "pidColor": 0
+        },
+        "210": {
+          "by": "PLAN",
+          "at": "2026-08-25T10:16:00.000Z",
+          "source": "manual",
+          "mark": "reserved",
+          "pid": "1785",
+          "pidIdx": 1,
+          "pidColor": 1
+        }
+      },
+      "editedBy": "NJ",
+      "updatedAt": "2026-08-25T10:16:00.000Z",
+      "audit": [],
+      "revisions": []
+    }
+  ]
+}

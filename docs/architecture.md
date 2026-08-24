@@ -110,7 +110,13 @@ This is currently the main frontend application file. It contains:
 - Admin user UI handling.
 - Print/PDF rendering.
 
-The file is large and should be split into modules in a future implementation. See [Review Notes](review-notes.md).
+Some shared logic has been split into browser modules under `src/`:
+
+- `src/numbering.js`
+- `src/status.js`
+- `src/permissions.js`
+
+`app.js` still owns the main UI orchestration and can be split further as the production implementation matures.
 
 ## Frontend State Model
 

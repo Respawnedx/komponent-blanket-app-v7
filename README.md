@@ -42,7 +42,17 @@ The frontend API URL is configured in `index.html` through `window.COMPONENT_APP
 .
 ├── index.html                  # Static HTML shell and modal markup
 ├── styles.css                  # Full UI styling and print layout
-├── app.js                      # Frontend state, rendering, auth, import/export, autosave
+├── app.js                      # Frontend orchestration, rendering, auth, import/export, autosave
+├── src/                        # Shared browser modules used by app.js
+│   ├── numbering.js            # Number, PID, date, and tag-format helpers
+│   ├── permissions.js          # Role and permission helpers
+│   └── status.js               # Status normalization and labels
+├── tests/
+│   └── ui-smoke.spec.js        # Playwright smoke test
+├── scripts/                    # Check, link, and D1 backup helpers
+├── examples/                   # Import and backup example files
+├── .github/workflows/ci.yml    # GitHub Actions CI
+├── package.json                # Developer scripts and test dependencies
 ├── server.js                   # Dependency-free local static server
 ├── data/records.json           # Local server data placeholder
 ├── assets/
@@ -119,7 +129,7 @@ The Worker uses optimistic concurrency. When the frontend saves a record, it sen
 
 ## Running Locally
 
-No npm install is required for the app itself.
+No npm install is required just to serve the app itself.
 
 ```bash
 node server.js
@@ -132,6 +142,20 @@ http://localhost:3000
 ```
 
 For cloud-connected local testing, make sure `ALLOWED_ORIGINS` in `backend/wrangler.toml` includes the local origin you use, for example `http://localhost:3000` or `http://localhost:5500`.
+
+For development checks and Playwright tests:
+
+```bash
+npm install
+npm run check
+npm run test:ui
+```
+
+`npm run test:ui` runs in local fallback mode by default, so it does not depend on live Cloudflare data. To smoke-test the live deployment:
+
+```bash
+npm run test:ui:live
+```
 
 ## Cloudflare Backend
 
@@ -177,6 +201,12 @@ The admin import modal supports:
 The current tag-list import is intentionally narrow: it imports tag numbers and marks them as `I brug` with source `Scan/import`. It does not yet migrate old Access descriptions, PID history, project comments, or historical revision rows.
 
 See [Import and Backup Formats](docs/import-formats.md) for exact examples and migration notes.
+
+Example files are available in [`examples/`](examples/):
+
+- [`examples/import-tag-list.csv`](examples/import-tag-list.csv)
+- [`examples/full-access-migration-template.csv`](examples/full-access-migration-template.csv)
+- [`examples/backup-example.json`](examples/backup-example.json)
 
 ## Current Project Status
 

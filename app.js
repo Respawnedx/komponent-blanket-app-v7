@@ -2,6 +2,50 @@
 // The app can run in cloud mode against the Cloudflare Worker configured in index.html,
 // or in local fallback mode with browser localStorage if no API URL is configured.
 
+const {
+  parseRange,
+  pad2,
+  parseSuffixInput,
+  compressRanges,
+  parsePidList,
+  parseMainNumber,
+  stripLeadingZeros,
+  validateSingleMainNumber,
+  formatOpsaetning,
+  buildTag,
+  buildTagKeepZeros,
+  parseTagString,
+  normalizeMainKey,
+  codeKeyForExplicitSeries,
+  todayDateInputValue,
+  normalizeDateInputValue,
+  formatDateValue,
+  setDateFieldValue,
+  getDateFieldValue,
+} = window.KomponentDB.numbering;
+
+const {
+  TAG_STATUS,
+  normalizeTagStatus,
+  tagStatusLabel,
+  tagStatusSymbol,
+  isBlockingStatus,
+  isScanSourceValue,
+  markSymbol,
+  transitionLabel,
+  addedChangeLabel,
+  removedChangeLabel,
+} = window.KomponentDB.status;
+
+const {
+  ROLE_USER,
+  ROLE_ALLOCATOR,
+  ROLE_ADMIN,
+  normalizeRole,
+  roleLabel,
+  createPermissionHelpers,
+} = window.KomponentDB.permissions;
+
 const STORAGE_KEY = "componentFormRecords_v1";
 const DRAFT_KEY = "componentFormDraft_v1";
 
@@ -50,38 +94,6 @@ let autoSaveTimer = null;
 let autoSaveInFlight = false;
 let autoSaveQueued = false;
 
-// ---------- Build checkbox grids ----------
-function parseRange(rangeStr){
-  const [a,b] = rangeStr.split("-").map(s=>parseInt(s.trim(),10));
-  return {a,b};
-}
-function pad2(n){ return String(n).padStart(2,"0"); }
-
-function parseSuffixInput(v){
-  const raw = String(v || "").trim();
-  if(!raw) return null;
-  const n = parseInt(raw, 10);
-  if(!Number.isFinite(n) || n < 1 || n > 99) return null;
-  return n;
-}
-
-function compressRanges(nums){
-  const arr = (nums || []).slice().sort((a,b)=>a-b);
-  const out = [];
-  let start = null;
-  let prev = null;
-
-  for(const n of arr){
-    if(start === null){ start = n; prev = n; continue; }
-    if(n === prev + 1){ prev = n; continue; }
-    out.push([start, prev]);
-    start = n; prev = n;
-  }
-  if(start !== null) out.push([start, prev]);
-  return out;
-}
-
-
 // ---------- Nummerstatus + Serie (0xx..9xx) ----------
 let currentMark = "blue";   // "blue" | "reserved" | "red"
 let currentSeries = 0;      // 0..9 (0xx, 1xx, ...)
@@ -107,12 +119,6 @@ function codeKeyForSeries(i){
   return off === 0 ? pad2(i) : String(off + i);
 }
 
-function codeKeyForExplicitSeries(series, suffix){
-  const s = Math.max(0, Math.min(9, parseInt(series, 10) || 0));
-  const n = Math.max(1, Math.min(99, parseInt(suffix, 10) || 0));
-  return s === 0 ? pad2(n) : String(s * 100 + n);
-}
-
 function updateRangeLabels(){
   const off = getSeriesOffset();
   const fmt = (n) => (off === 0 && n < 100) ? pad2(n) : String(n);
@@ -127,18 +133,6 @@ function updateRangeLabels(){
     const B = off + b;
     span.textContent = `${fmt(A)} - ${fmt(B)}`;
   });
-}
-
-function parsePidList(raw){
-  const s = String(raw || "");
-  // Find typisk 3-6 cifre PID-numre (fx 1751;3503)
-  const nums = s.match(/\b\d{3,6}\b/g) || [];
-  const uniq = [];
-  for(const n of nums){
-    const t = String(n).trim();
-    if(t && !uniq.includes(t)) uniq.push(t);
-  }
-  return uniq;
 }
 
 function getCurrentPidValue(){
@@ -199,145 +193,6 @@ function refreshPidOptionsFromField(){
   updateSelectedCodes();
 }
 
-function parseMainNumber(raw){
-  const s = String(raw || "").trim();
-  if(!s) return "";
-  // Prefer digits at start (fx "00075 nr. 01-99")
-  const m1 = s.match(/^\s*(\d{1,10})/);
-  if(m1) return m1[1];
-  // Fallback: first digit group anywhere
-  const m2 = s.match(/\b(\d{1,10})\b/);
-  return m2 ? m2[1] : "";
-}
-
-function stripLeadingZeros(numStr){
-  const s = String(numStr || "");
-  if(!s) return "";
-  const n = parseInt(s, 10);
-  if(!Number.isFinite(n)) return s.replace(/^0+(?=\d)/, "");
-  return String(n);
-}
-
-function validateSingleMainNumber(raw){
-  const s = String(raw || "").trim();
-  if(!s) return { ok:false, message:"Udfyld 'Hovedkomponentnr.' (fx 00075)." };
-
-  // Find 'hovednumre' som 4+ cifre (så 01-99 og 101-199 ikke tæller med)
-  const groups = [...s.matchAll(/\b\d{4,10}\b/g)].map(m => m[0]);
-
-  // Hvis brugeren kun har et 'kort' hovednr (fx 575), kan vi ikke robust skelne det fra 101/199,
-  // så vi tjekker kun 4+ cifre for at undgå falske positiver.
-  if(groups.length <= 1) return { ok:true };
-
-  const first = stripLeadingZeros(groups[0]);
-  const others = groups.slice(1).map(stripLeadingZeros).filter(x => x && x !== first);
-  const uniq = [...new Set([first, ...others])];
-
-  if(uniq.length > 1){
-    return {
-      ok:false,
-      message:`Feltet 'Hovedkomponentnr.' indeholder flere hovednumre (${uniq.join(", ")}). Brug kun ét hovednummer.`
-    };
-  }
-
-  return { ok:true };
-}
-
-function formatOpsaetning(code){
-  const n = parseInt(code, 10);
-  if(Number.isFinite(n) && n >= 0 && n < 100) return pad2(n);
-  return String(code);
-}
-
-function buildTag(mainRaw, code){
-  const main = parseMainNumber(mainRaw);
-  const mainTag = stripLeadingZeros(main);
-  const ops = formatOpsaetning(code);
-  return mainTag ? `${mainTag}.${ops}` : "";
-}
-
-// Same tag format, but keeps leading zeros in the main number (useful for search/display)
-function buildTagKeepZeros(mainRaw, code){
-  const main = parseMainNumber(mainRaw);
-  const ops = formatOpsaetning(code);
-  return main ? `${main}.${ops}` : "";
-}
-
-// Parse a tag string like '4390.002' or '27.530' into {mainRaw, codeKey}
-// codeKey matches the app's internal key format: '02' (01-99) or '530' (100-999)
-function parseTagString(tagStr){
-  const t = String(tagStr || '').trim();
-  if(!t) return null;
-  const m = t.match(/^\s*(\d{1,10})\s*\.\s*(\d{1,10})\s*$/);
-  if(!m) return null;
-
-  const mainRaw = m[1];
-  const codeRaw = m[2];
-  const codeNum = parseInt(codeRaw, 10);
-  if(!Number.isFinite(codeNum)) return null;
-
-  // 01-99 (0xx)
-  if(codeNum >= 1 && codeNum <= 99){
-    return { mainRaw, codeKey: pad2(codeNum) };
-  }
-
-  // 101-999 (1xx..9xx)
-  if(codeNum >= 100 && codeNum <= 999){
-    const series = Math.floor(codeNum / 100);
-    const suffix = codeNum % 100;
-    if(series < 1 || series > 9) return null;
-    if(suffix < 1 || suffix > 99) return null;
-    return { mainRaw, codeKey: String(codeNum) };
-  }
-
-  return null;
-}
-
-function normalizeMainKey(mainRaw){
-  return stripLeadingZeros(parseMainNumber(mainRaw));
-}
-
-const TAG_STATUS = {
-  ACTIVE: "blue",
-  RESERVED: "reserved",
-  RELEASED: "red",
-};
-
-function normalizeTagStatus(mark){
-  const raw = String(mark || TAG_STATUS.ACTIVE).trim().toLowerCase();
-  if(raw === TAG_STATUS.RESERVED || raw === "project" || raw === "temporary") return TAG_STATUS.RESERVED;
-  if(raw === TAG_STATUS.RELEASED || raw === "free" || raw === "removed") return TAG_STATUS.RELEASED;
-  // Legacy green scan marks are treated as active tags with scan/import as source.
-  return TAG_STATUS.ACTIVE;
-}
-
-function tagStatusLabel(mark){
-  const status = normalizeTagStatus(mark);
-  if(status === TAG_STATUS.RESERVED) return "Projekt";
-  if(status === TAG_STATUS.RELEASED) return "Frigivet";
-  return "I brug";
-}
-
-function tagStatusSymbol(mark){
-  const status = normalizeTagStatus(mark);
-  if(status === TAG_STATUS.RESERVED) return "🟠";
-  if(status === TAG_STATUS.RELEASED) return "🔴";
-  return "🔵";
-}
-
-function isBlockingStatus(mark){
-  const status = normalizeTagStatus(mark);
-  return status === TAG_STATUS.ACTIVE || status === TAG_STATUS.RESERVED;
-}
-
-function isScanSourceValue(source, mark){
-  return source === "scan" || mark === "scan";
-}
-
-function markSymbol(mark){
-  return tagStatusSymbol(mark);
-}
-
 function getRecMark(rec, code){
   if(!rec) return TAG_STATUS.ACTIVE;
   const src = rec.codeSources || {};
@@ -354,87 +209,6 @@ function formatChangeItem(tag, mark, pid, showPid){
   const m = markSymbol(mark);
   const p = (showPid && pid) ? ` [${pid}]` : "";
   return `${tag}${m}${p}`;
-}
-
-function todayDateInputValue(date = new Date()){
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 10);
-}
-
-function normalizeDateInputValue(value){
-  const raw = String(value || "").trim();
-  if(!raw) return "";
-  if(/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-
-  const m = raw.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
-  if(!m) return "";
-
-  const day = parseInt(m[1], 10);
-  const month = parseInt(m[2], 10);
-  const year = parseInt(m[3], 10);
-  if(!Number.isFinite(day) || !Number.isFinite(month) || !Number.isFinite(year)) return "";
-
-  const d = new Date(Date.UTC(year, month - 1, day));
-  if(d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return "";
-  return `${String(year).padStart(4,"0")}-${pad2(month)}-${pad2(day)}`;
-}
-
-function formatDateValue(value){
-  const normalized = normalizeDateInputValue(value);
-  if(!normalized) return String(value || "").trim();
-  const [year, month, day] = normalized.split("-");
-  return `${day}.${month}.${year}`;
-}
-
-function setDateFieldValue(field, value, fallbackToday = false){
-  if(!field) return;
-  const raw = String(value || "").trim();
-  const normalized = normalizeDateInputValue(raw);
-  if(normalized){
-    field.value = normalized;
-    delete field.dataset.legacyValue;
-    field.removeAttribute("title");
-    return;
-  }
-
-  field.value = fallbackToday ? todayDateInputValue() : "";
-  if(raw){
-    field.dataset.legacyValue = raw;
-    field.title = `Tidligere værdi: ${raw}`;
-  }else{
-    delete field.dataset.legacyValue;
-    field.removeAttribute("title");
-  }
-}
-
-function getDateFieldValue(field){
-  if(!field) return "";
-  return field.value || field.dataset.legacyValue || "";
-}
-
-function transitionLabel(fromMark, toMark){
-  const from = normalizeTagStatus(fromMark);
-  const to = normalizeTagStatus(toMark);
-  if(from === TAG_STATUS.RESERVED && to === TAG_STATUS.RELEASED) return "Projekt frigivet";
-  if(from === TAG_STATUS.RELEASED && to === TAG_STATUS.RESERVED) return "Frigivet tilbage til projekt";
-  if(from === TAG_STATUS.RELEASED && to === TAG_STATUS.ACTIVE) return "Frigivet sat i brug";
-  if(from === TAG_STATUS.ACTIVE && to === TAG_STATUS.RELEASED) return "I brug markeret frigivet";
-  if(to === TAG_STATUS.RELEASED) return "Frigivet";
-  return `Status ændret (${tagStatusLabel(from)} → ${tagStatusLabel(to)})`;
-}
-
-function addedChangeLabel(mark){
-  const status = normalizeTagStatus(mark);
-  if(status === TAG_STATUS.RESERVED) return "Projekt reserveret";
-  if(status === TAG_STATUS.RELEASED) return "Frigivet markeret";
-  return "Sat i brug";
-}
-
-function removedChangeLabel(mark){
-  const status = normalizeTagStatus(mark);
-  if(status === TAG_STATUS.RESERVED) return "Projekt fjernet";
-  if(status === TAG_STATUS.RELEASED) return "Frigivet fjernet";
-  return "I brug fjernet";
 }
 
 function computeTagChanges(prevRec, currRec){
@@ -601,67 +375,25 @@ function clearSeriesCodes(series){
 const AUTH_KEY = "componentFormAuth_v2";
 const API_BASE = (window.COMPONENT_APP_API || "").trim().replace(/\/+$/,"");
 const USE_CLOUD = !!API_BASE;
-const ROLE_USER = "user";
-const ROLE_ALLOCATOR = "allocator";
-const ROLE_ADMIN = "admin";
 
 // Local fallback storage key (bruges kun hvis USE_CLOUD=false)
 const USER_KEY = "componentFormUser_v1"; // legacy key for backward compatibility
 
-function normalizeRole(role){
-  const raw = String(role || ROLE_USER).trim().toLowerCase().replace(/[\s-]+/g, "_");
-  if(raw === ROLE_ADMIN) return ROLE_ADMIN;
-  if(["allocator", "planner", "semi_admin", "semiadmin", "editor", "manager"].includes(raw)) return ROLE_ALLOCATOR;
-  return ROLE_USER;
-}
-
-function roleLabel(role){
-  const r = normalizeRole(role);
-  if(r === ROLE_ADMIN) return "admin";
-  if(r === ROLE_ALLOCATOR) return "planner";
-  return "visning";
-}
-
-function canAllocateNumbers(user = getCurrentUser()){
-  const role = normalizeRole(user?.role);
-  return role === ROLE_ADMIN || role === ROLE_ALLOCATOR;
-}
-
-function isPlannerOnly(user = getCurrentUser()){
-  return normalizeRole(user?.role) === ROLE_ALLOCATOR;
-}
-
-function canManageUsers(user = getCurrentUser()){
-  return normalizeRole(user?.role) === ROLE_ADMIN;
-}
-
-function canCreateRecords(user = getCurrentUser()){
-  const role = normalizeRole(user?.role);
-  return role === ROLE_ADMIN || role === ROLE_ALLOCATOR;
-}
-
-function canImportData(user = getCurrentUser()){
-  return canManageUsers(user);
-}
-
-function canScanPaper(user = getCurrentUser()){
-  return canManageUsers(user);
-}
-
-function canExportBackup(user = getCurrentUser()){
-  return canManageUsers(user);
-}
-
-function canSaveRecords(user = getCurrentUser()){
-  const role = normalizeRole(user?.role);
-  return role === ROLE_ADMIN || role === ROLE_ALLOCATOR;
-}
-
-function canUseStatus(mark, user = getCurrentUser()){
-  const status = normalizeTagStatus(mark);
-  if(canManageUsers(user)) return true;
-  return isPlannerOnly(user) && status === TAG_STATUS.RESERVED;
-}
+const {
+  canAllocateNumbers,
+  isPlannerOnly,
+  canManageUsers,
+  canCreateRecords,
+  canImportData,
+  canScanPaper,
+  canExportBackup,
+  canSaveRecords,
+  canUseStatus,
+} = createPermissionHelpers({
+  getCurrentUser: () => getCurrentUser(),
+  normalizeTagStatus,
+  TAG_STATUS,
+});
 
 function getAuth(){
   try{

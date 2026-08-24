@@ -49,6 +49,7 @@ This creates:
 - `records` for saved component forms.
 - `audit` for user actions and record changes.
 - `login_throttle` for failed-login throttling.
+- `hovedkomponentnr_normalized` plus a unique index on `records` for database-level duplicate protection.
 
 ## Configure Secrets and Variables
 

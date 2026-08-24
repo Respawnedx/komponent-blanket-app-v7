@@ -160,6 +160,7 @@ Migrations create:
 - `records`
 - `audit`
 - `login_throttle`
+- normalized main-number duplicate protection on `records`
 
 ## Required Secret
 
@@ -226,24 +227,25 @@ For production, prefer Microsoft Entra ID / Cloudflare Access instead of local d
 After changes:
 
 ```bash
-node --check app.js
-node --check backend/src/index.js
-node --check server.js
-git diff --check
+npm install
+npm run check
+npm run test:ui
 ```
 
-Run the Playwright smoke test from the external work folder used during development:
-
-```powershell
-$env:UI_URL = "http://localhost:5500/?v=local-check"
-.\node_modules\.bin\playwright.cmd test .\ui-check.spec.js --reporter=line
-```
+`npm run test:ui` starts the local static server and runs the Playwright smoke test in local fallback mode.
 
 Live verification:
 
 ```powershell
+$env:UI_USE_LIVE = "1"
 $env:UI_URL = "https://respawnedx.github.io/komponent-blanket-app-v7/?v=<commit>"
-.\node_modules\.bin\playwright.cmd test .\ui-check.spec.js --reporter=line
+npm run test:ui
+```
+
+Or:
+
+```bash
+UI_USE_LIVE=1 UI_URL="https://respawnedx.github.io/komponent-blanket-app-v7/?v=<commit>" npm run test:ui
 ```
 
 Health check:
@@ -275,7 +277,13 @@ For production backup, do not rely only on the UI **Backup JSON** button. Use da
 Example D1 export:
 
 ```bash
-npx wrangler d1 export komponent_db --remote --output=./komponent_db.sql
+npm run backup:d1 -- komponent_db
+```
+
+To choose a specific output file:
+
+```bash
+npm run backup:d1 -- komponent_db --output backups/komponent_db.sql
 ```
 
 Example restore/import into another database:

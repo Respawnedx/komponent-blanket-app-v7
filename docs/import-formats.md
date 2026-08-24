@@ -45,6 +45,8 @@ NR
 5222.902
 ```
 
+See [`../examples/import-tag-list.csv`](../examples/import-tag-list.csv) for a ready-to-use example file.
+
 Only the `NR` column is used today. Other columns such as description, plant, PID, comments, or status are ignored by the current import.
 
 ### Tag Syntax
@@ -139,6 +141,8 @@ Hovedkomponentnr,Beskrivelse,Anlæg,PID Tegningsnr,Opsætning,Status,Kilde,Komme
 ```
 
 That extended format is not implemented yet.
+
+See [`../examples/full-access-migration-template.csv`](../examples/full-access-migration-template.csv) for the recommended future template.
 
 ## Exporting From Microsoft Access
 
@@ -243,6 +247,8 @@ Current backup schema:
   ]
 }
 ```
+
+See [`../examples/backup-example.json`](../examples/backup-example.json) for a compact example backup file.
 
 The JSON import accepts:
 

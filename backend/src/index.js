@@ -137,6 +137,10 @@ function stripLeadingZeros(numStr) {
   return String(n);
 }
 
+function normalizeMainNumberForDb(raw) {
+  return stripLeadingZeros(parseMainNumber(raw));
+}
+
 function validateSingleMainNumber(raw) {
   const str = String(raw || "").trim();
   if (!str) return { ok: false, message: "hovedkomponentnr required" };
@@ -156,14 +160,82 @@ function validateSingleMainNumber(raw) {
 }
 
 async function findDuplicateMainRecord(env, hoved, currentId) {
-  const normalized = stripLeadingZeros(hoved);
+  const normalized = normalizeMainNumberForDb(hoved);
   if (!normalized) return null;
+
+  try {
+    const row = await env.DB.prepare(
+      "SELECT id, hovedkomponentnr FROM records WHERE hovedkomponentnr_normalized=? AND id<>? LIMIT 1"
+    ).bind(normalized, String(currentId)).first();
+
+    if (row) return row;
+  } catch (err) {
+    // Older databases may not have migration 004 yet. Fall back to the legacy scan.
+    const msg = String(err?.message || err);
+    if (!/no such column/i.test(msg) || !/hovedkomponentnr_normalized/i.test(msg)) throw err;
+  }
 
   const { results } = await env.DB.prepare(
     "SELECT id, hovedkomponentnr FROM records WHERE id<>?"
   ).bind(String(currentId)).all();
 
   return (results || []).find(row => stripLeadingZeros(row?.hovedkomponentnr) === normalized) || null;
+}
+
+function isUniqueMainNumberError(err) {
+  return /hovedkomponentnr_normalized|idx_records_hoved_normalized_unique|UNIQUE constraint failed/i.test(String(err?.message || err));
+}
+
+async function upsertRecordRow(env, values) {
+  try {
+    return await env.DB.prepare(
+      "INSERT INTO records(id, hovedkomponentnr, hovedkomponentnr_normalized, beskrivelse, anlaeg, pid, signatur1, signatur2, selected_count, payload, created_at, created_by, updated_at, updated_by) " +
+      "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) " +
+      "ON CONFLICT(id) DO UPDATE SET hovedkomponentnr=excluded.hovedkomponentnr, hovedkomponentnr_normalized=excluded.hovedkomponentnr_normalized, beskrivelse=excluded.beskrivelse, anlaeg=excluded.anlaeg, pid=excluded.pid, signatur1=excluded.signatur1, signatur2=excluded.signatur2, selected_count=excluded.selected_count, payload=excluded.payload, updated_at=excluded.updated_at, updated_by=excluded.updated_by"
+    )
+      .bind(
+        values.id,
+        values.hoved,
+        values.hovedNormalized,
+        values.desc,
+        values.anlaeg,
+        values.pid,
+        values.sign1,
+        values.sign2,
+        values.selectedCount,
+        values.payload,
+        values.created_at,
+        values.created_by,
+        values.ts,
+        values.updated_by
+      )
+      .run();
+  } catch (err) {
+    const msg = String(err?.message || err);
+    if (!/no such column/i.test(msg) || !/hovedkomponentnr_normalized/i.test(msg)) throw err;
+
+    return await env.DB.prepare(
+      "INSERT INTO records(id, hovedkomponentnr, beskrivelse, anlaeg, pid, signatur1, signatur2, selected_count, payload, created_at, created_by, updated_at, updated_by) " +
+      "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) " +
+      "ON CONFLICT(id) DO UPDATE SET hovedkomponentnr=excluded.hovedkomponentnr, beskrivelse=excluded.beskrivelse, anlaeg=excluded.anlaeg, pid=excluded.pid, signatur1=excluded.signatur1, signatur2=excluded.signatur2, selected_count=excluded.selected_count, payload=excluded.payload, updated_at=excluded.updated_at, updated_by=excluded.updated_by"
+    )
+      .bind(
+        values.id,
+        values.hoved,
+        values.desc,
+        values.anlaeg,
+        values.pid,
+        values.sign1,
+        values.sign2,
+        values.selectedCount,
+        values.payload,
+        values.created_at,
+        values.created_by,
+        values.ts,
+        values.updated_by
+      )
+      .run();
+  }
 }
 
 function toHex(buf) {
@@ -621,6 +693,7 @@ export default {
       const vMain = validateSingleMainNumber(rec.hovedkomponentnr);
       if(!vMain.ok) return jsonResponse({ error: vMain.message || "Invalid hovedkomponentnr" }, origin, allowed, 400);
       const hoved = String(vMain.main || "");
+      const hovedNormalized = normalizeMainNumberForDb(hoved);
       rec.hovedkomponentnr = hoved;
       const desc = String(rec.beskrivelse || "");
       const anlaeg = String(rec.anlaeg || "");
@@ -676,27 +749,32 @@ export default {
         if (plannerError) return jsonResponse({ error: plannerError }, origin, allowed, 403);
       }
 
-      await env.DB.prepare(
-        "INSERT INTO records(id, hovedkomponentnr, beskrivelse, anlaeg, pid, signatur1, signatur2, selected_count, payload, created_at, created_by, updated_at, updated_by) " +
-        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) " +
-        "ON CONFLICT(id) DO UPDATE SET hovedkomponentnr=excluded.hovedkomponentnr, beskrivelse=excluded.beskrivelse, anlaeg=excluded.anlaeg, pid=excluded.pid, signatur1=excluded.signatur1, signatur2=excluded.signatur2, selected_count=excluded.selected_count, payload=excluded.payload, updated_at=excluded.updated_at, updated_by=excluded.updated_by"
-      )
-        .bind(
-          String(rec.id),
+      try {
+        await upsertRecordRow(env, {
+          id: String(rec.id),
           hoved,
+          hovedNormalized,
           desc,
           anlaeg,
           pid,
           sign1,
           sign2,
           selectedCount,
-          JSON.stringify(rec),
+          payload: JSON.stringify(rec),
           created_at,
           created_by,
           ts,
-          user.initials
-        )
-        .run();
+          updated_by: user.initials,
+        });
+      } catch (err) {
+        if (isUniqueMainNumberError(err)) {
+          return jsonResponse({
+            error: `Main component number ${hoved} already exists in another record.`,
+            duplicate: true,
+          }, origin, allowed, 409);
+        }
+        throw err;
+      }
 
       await writeAudit(env, {
         initials: user.initials,

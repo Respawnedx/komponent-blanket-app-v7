@@ -47,7 +47,7 @@ function serveStatic(req, res, pathname){
 
   if(map[pathname]){
     filePath = path.resolve(ROOT, map[pathname]);
-  }else if(pathname.startsWith("/assets/") || pathname.startsWith("/docs/")){
+  }else if(pathname.startsWith("/assets/") || pathname.startsWith("/docs/") || pathname.startsWith("/src/")){
     // Prevent path traversal
     const safe = pathname.replace(/^\/+/, "");
     filePath = path.resolve(ROOT, safe);

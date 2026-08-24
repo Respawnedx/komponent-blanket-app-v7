@@ -1,0 +1,20 @@
+{
+  "name": "komponentdatabase",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Komponentdatabase prototype for component-number management.",
+  "scripts": {
+    "start": "node server.js",
+    "check": "npm run check:syntax && npm run check:links",
+    "check:syntax": "node scripts/check-syntax.mjs",
+    "check:links": "node scripts/check-markdown-links.mjs",
+    "test:ui": "playwright test",
+    "test:ui:live": "cross-env UI_USE_LIVE=1 playwright test",
+    "backup:d1": "node scripts/d1-backup.mjs",
+    "deploy:worker": "cd backend && npx wrangler deploy"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "cross-env": "7.0.3"
+  }
+}
