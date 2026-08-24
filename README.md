@@ -42,10 +42,13 @@ The frontend API URL is configured in `index.html` through `window.COMPONENT_APP
 .
 ├── index.html                  # Static HTML shell and modal markup
 ├── styles.css                  # Full UI styling and print layout
-├── app.js                      # Frontend orchestration, rendering, auth, import/export, autosave
+├── app.js                      # Frontend orchestration, rendering, auth, import, autosave
 ├── src/                        # Shared browser modules used by app.js
+│   ├── export.js               # Print, Excel export, and JSON backup helpers
 │   ├── numbering.js            # Number, PID, date, and tag-format helpers
 │   ├── permissions.js          # Role and permission helpers
+│   ├── revisions.js            # Revision diffing/render helpers
+│   ├── scan.js                 # Paper scan checkbox detection helpers
 │   └── status.js               # Status normalization and labels
 ├── tests/
 │   └── ui-smoke.spec.js        # Playwright smoke test

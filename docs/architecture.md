@@ -104,17 +104,19 @@ This is currently the main frontend application file. It contains:
 - Form serialization/deserialization.
 - Availability calculations.
 - Autosave and draft handling.
-- Revision diffing and rendering.
-- Import/export handling.
+- Revision rendering.
+- Import handling.
 - OCR/scan handling.
 - Admin user UI handling.
-- Print/PDF rendering.
 
 Some shared logic has been split into browser modules under `src/`:
 
+- `src/export.js`
 - `src/numbering.js`
 - `src/status.js`
 - `src/permissions.js`
+- `src/revisions.js`
+- `src/scan.js`
 
 `app.js` still owns the main UI orchestration and can be split further as the production implementation matures.
 

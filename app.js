@@ -46,6 +46,30 @@ const {
   createPermissionHelpers,
 } = window.KomponentDB.permissions;
 
+const {
+  getRecMark,
+  computeTagChanges,
+  formatRevDate,
+  getRevisionsSorted,
+  lastRevisionString,
+  revisionChipsHtml,
+} = window.KomponentDB.revisions.createRevisionHelpers({
+  TAG_STATUS,
+  parsePidList,
+  buildTag,
+  normalizeTagStatus,
+  markSymbol,
+  transitionLabel,
+  addedChangeLabel,
+  removedChangeLabel,
+});
+
+const {
+  loadImageFromFile,
+  cropToContent,
+  detectCheckedCodesFromCanvas,
+} = window.KomponentDB.scan;
+
 const STORAGE_KEY = "componentFormRecords_v1";
 const DRAFT_KEY = "componentFormDraft_v1";
 
@@ -192,104 +216,6 @@ function refreshPidOptionsFromField(){
   renderPidSeg();
   updateSelectedCodes();
 }
-
-function getRecMark(rec, code){
-  if(!rec) return TAG_STATUS.ACTIVE;
-  const src = rec.codeSources || {};
-  const meta = rec.codeMeta || {};
-  return normalizeTagStatus(meta?.[code]?.mark || TAG_STATUS.ACTIVE);
-}
-
-function getRecPid(rec, code){
-  if(!rec) return null;
-  return (rec.codeMeta && rec.codeMeta[code] && rec.codeMeta[code].pid) ? String(rec.codeMeta[code].pid) : null;
-}
-
-function formatChangeItem(tag, mark, pid, showPid){
-  const m = markSymbol(mark);
-  const p = (showPid && pid) ? ` [${pid}]` : "";
-  return `${tag}${m}${p}`;
-}
-
-function computeTagChanges(prevRec, currRec){
-  if(!currRec) return "";
-  const main = currRec.hovedkomponentnr || "";
-  const showPid = (parsePidList(currRec.pid || "").length > 1);
-
-  const prevSel = new Set(prevRec?.selectedCodes || []);
-  const currSel = new Set(currRec.selectedCodes || []);
-
-  const addedByLabel = new Map();
-  const removedByLabel = new Map();
-  const changed = [];
-  const changedByLabel = new Map();
-
-  const pushGrouped = (map, label, value) => {
-    if(!map.has(label)) map.set(label, []);
-    map.get(label).push(value);
-  };
-  const pushChanged = (label, value) => {
-    pushGrouped(changedByLabel, label, value);
-  };
-
-  // Added & changed
-  for(const code of currRec.selectedCodes || []){
-    if(!prevSel.has(code)){
-      const tag = buildTag(main, code);
-      const mark = getRecMark(currRec, code);
-      pushGrouped(addedByLabel, addedChangeLabel(mark), formatChangeItem(tag, mark, getRecPid(currRec, code), showPid));
-    }else{
-      // present in both: check mark/pid changes
-      const m0 = getRecMark(prevRec, code);
-      const m1 = getRecMark(currRec, code);
-      const p0 = getRecPid(prevRec, code);
-      const p1 = getRecPid(currRec, code);
-
-      const tag = buildTag(main, code);
-      const parts = [];
-
-      if(m0 !== m1){
-        pushChanged(transitionLabel(m0, m1), `${tag} ${markSymbol(m0)}→${markSymbol(m1)}`);
-      }
-      if(showPid && (p0 || p1) && (String(p0||"") !== String(p1||""))){
-        parts.push(`[${p0||"—"}→${p1||"—"}]`);
-      }
-      if(parts.length){
-        changed.push(`${tag} ${parts.join(" ")}`);
-      }
-    }
-  }
-
-  // Removed
-  for(const code of (prevRec?.selectedCodes || [])){
-    if(!currSel.has(code)){
-      const tag = buildTag(main, code);
-      const mark = getRecMark(prevRec, code);
-      pushGrouped(removedByLabel, removedChangeLabel(mark), formatChangeItem(tag, mark, getRecPid(prevRec, code), showPid));
-    }
-  }
-
-  if(!prevRec){
-    const addedLines = [...addedByLabel.entries()].map(([label, items]) => `${label}: ${items.join(", ")}`);
-    if(!addedLines.length) return "Oprettet (ingen tags valgt).";
-    return `Oprettet\n${addedLines.join("\n")}`;
-  }
-
-  const lines = [];
-  for(const [label, items] of addedByLabel.entries()){
-    lines.push(`${label}: ${items.join(", ")}`);
-  }
-  for(const [label, items] of removedByLabel.entries()){
-    lines.push(`${label}: ${items.join(", ")}`);
-  }
-  for(const [label, items] of changedByLabel.entries()){
-    lines.push(`${label}: ${items.join(", ")}`);
-  }
-  if(changed.length) lines.push(`Ændret: ${changed.join(", ")}`);
-  if(!lines.length) return "Ingen tag-ændringer.";
-  return lines.join("\n");
-}
-
 
 function getMarkForCode(code){
   const src = codeSource[code] || "manual";
@@ -2172,120 +2098,6 @@ scanFile.addEventListener("change", async () => {
 });
 
 
-function loadImageFromFile(file){
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-/**
- * Auto-crop: find bounding box of non-white pixels (ink) and crop with padding.
- * This helps a LOT when the image includes browser UI / margins, or when the scan has borders.
- */
-function cropToContent(srcCanvas){
-  const ctx = srcCanvas.getContext("2d", { willReadFrequently:true });
-  const { width, height } = srcCanvas;
-  const data = ctx.getImageData(0,0,width,height).data;
-
-  const WHITE_LUM = 245;   // treat near-white as background
-  const STRIDE = 2;        // speed vs accuracy (2 = sample every other pixel)
-  let minX = width, minY = height, maxX = -1, maxY = -1;
-
-  for(let y=0;y<height;y+=STRIDE){
-    for(let x=0;x<width;x+=STRIDE){
-      const i = (y*width + x) * 4;
-      const r = data[i], g = data[i+1], b = data[i+2];
-      const lum = 0.2126*r + 0.7152*g + 0.0722*b;
-      if(lum < WHITE_LUM){
-        if(x < minX) minX = x;
-        if(y < minY) minY = y;
-        if(x > maxX) maxX = x;
-        if(y > maxY) maxY = y;
-      }
-    }
-  }
-
-  // If we didn't find content, return original
-  if(maxX < 0) return srcCanvas;
-
-  // Pad
-  const pad = Math.round(Math.min(width, height) * 0.02) + 12; // dynamic + fixed
-  minX = Math.max(0, minX - pad);
-  minY = Math.max(0, minY - pad);
-  maxX = Math.min(width-1, maxX + pad);
-  maxY = Math.min(height-1, maxY + pad);
-
-  const cw = Math.max(1, maxX - minX + 1);
-  const ch = Math.max(1, maxY - minY + 1);
-
-  const out = document.createElement("canvas");
-  out.width = cw;
-  out.height = ch;
-  const octx = out.getContext("2d", { willReadFrequently:true });
-  octx.drawImage(srcCanvas, minX, minY, cw, ch, 0, 0, cw, ch);
-
-  return out;
-}
-
-function avgLum(ctx, x, y, w, h){
-  x = Math.max(0, Math.round(x));
-  y = Math.max(0, Math.round(y));
-  w = Math.max(1, Math.round(w));
-  h = Math.max(1, Math.round(h));
-  const img = ctx.getImageData(x, y, w, h).data;
-  let sum = 0;
-  for(let i=0;i<img.length;i+=4){
-    const lum = 0.2126*img[i] + 0.7152*img[i+1] + 0.0722*img[i+2];
-    sum += lum;
-  }
-  return sum / (img.length/4);
-}
-
-/**
- * Detect if a checkbox is marked by comparing darkness in its center vs nearby background.
- * This is more robust than a fixed threshold.
- */
-function detectCheckedCodesFromCanvas(canvas, paperEl){
-  const ctx = canvas.getContext("2d", { willReadFrequently:true });
-
-  const cbs = Array.from(paperEl.querySelectorAll(".cb"));
-  const pr = paperEl.getBoundingClientRect();
-
-  const detected = [];
-  const CENTER_SIZE = 12;  // sample area size (px)
-  const OUT_SIZE = 12;
-  const OUT_DIST = 18;     // how far from center to sample "background"
-  const DELTA = 14;        // sensitivity: higher = fewer checks, lower = more checks
-
-  for(const cb of cbs){
-    const r = cb.getBoundingClientRect();
-
-    const cx = (r.left - pr.left) + r.width/2;
-    const cy = (r.top  - pr.top)  + r.height/2;
-
-    const centerAvg = avgLum(ctx, cx - CENTER_SIZE/2, cy - CENTER_SIZE/2, CENTER_SIZE, CENTER_SIZE);
-
-    // sample background around checkbox (4 directions)
-    const out1 = avgLum(ctx, cx - OUT_SIZE/2, cy - OUT_SIZE/2 - OUT_DIST, OUT_SIZE, OUT_SIZE);
-    const out2 = avgLum(ctx, cx - OUT_SIZE/2, cy - OUT_SIZE/2 + OUT_DIST, OUT_SIZE, OUT_SIZE);
-    const out3 = avgLum(ctx, cx - OUT_SIZE/2 - OUT_DIST, cy - OUT_SIZE/2, OUT_SIZE, OUT_SIZE);
-    const out4 = avgLum(ctx, cx - OUT_SIZE/2 + OUT_DIST, cy - OUT_SIZE/2, OUT_SIZE, OUT_SIZE);
-    const outAvg = (out1 + out2 + out3 + out4) / 4;
-
-    // If center is significantly darker than nearby background -> marked
-    if((outAvg - centerAvg) > DELTA){
-      detected.push(cb.dataset.code);
-    }
-  }
-
-  return detected.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
-}
-
-
-
 // ---------- Login modal wiring ----------
 const loginModal = document.getElementById("loginModal");
 const loginForm = document.getElementById("loginForm");
@@ -2557,60 +2369,6 @@ if(btnToggleRevisions){
 }
 
 // ---------- Revisions rendering ----------
-function formatRevDate(iso){
-  try{
-    return new Date(iso).toLocaleString("da-DK", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
-  }catch{
-    return String(iso || "");
-  }
-}
-
-function getRevisionsSorted(rec){
-  const arr = Array.isArray(rec?.revisions) ? rec.revisions : [];
-  const out = arr.map(r => ({
-    at: String(r?.at || ""),
-    by: String(r?.by || ""),
-    desc: String(r?.desc || ""),
-    changes: String(r?.changes || ""),
-  }));
-  out.sort((a,b) => String(b.at).localeCompare(String(a.at)));
-  return out;
-}
-
-function lastRevisionString(rec){
-  const revs = getRevisionsSorted(rec);
-  const r = revs[0];
-  if(!r || (!r.at && !r.by && !r.desc)) return "";
-  const parts = [formatRevDate(r.at), (r.by || "—"), (r.desc || "")].filter(Boolean);
-  return parts.join(", ");
-}
-
-function revisionSymbolToStatus(symbol){
-  if(symbol === "🟠") return TAG_STATUS.RESERVED;
-  if(symbol === "🔴") return TAG_STATUS.RELEASED;
-  return TAG_STATUS.ACTIVE;
-}
-
-function revisionChipsHtml(changes){
-  const text = String(changes || "").trim();
-  if(!text) return `<span class="revCard__plain">—</span>`;
-
-  const tokens = [];
-  const re = /(\d{1,10}\.\d{1,3})([🔵🟠🔴])?/gu;
-  let match;
-  while((match = re.exec(text))){
-    tokens.push({ tag: match[1], status: revisionSymbolToStatus(match[2] || "") });
-  }
-
-  if(!tokens.length){
-    return `<div class="revCard__plain">${escapeHtml(text).replace(/\n/g, "<br>")}</div>`;
-  }
-
-  return tokens.map(item =>
-    `<span class="revChip" data-mark="${item.status}">${escapeHtml(item.tag)}</span>`
-  ).join("");
-}
-
 function renderRevisions(rec){
   if(!revCardsEl) return;
   const revs = getRevisionsSorted(rec);
@@ -3081,451 +2839,37 @@ el("btnLoad").addEventListener("click", async () => {
   renderRecordList();
 });
 
-// ---------- Print (valgte poster) ----------
-function codeKeyForSeriesN(i, series){
-  return (series === 0) ? pad2(i) : String(series * 100 + i);
-}
-function displayNumberForSeriesN(i, series){
-  return (series === 0) ? pad2(i) : String(series * 100 + i);
-}
-function formatRangeLabelForSeries(rangeStr, series){
-  const {a,b} = parseRange(rangeStr);
-  const off = series * 100;
-  const A = off + a;
-  const B = off + b;
-  const fmt = (n) => (series === 0 ? pad2(n) : String(n));
-  return `${fmt(A)} - ${fmt(B)}`;
-}
-
-function buildGridForPrint(gridEl, series, rec, selectedSet){
-  const {a,b} = parseRange(gridEl.dataset.range);
-  gridEl.innerHTML = "";
-
-  // Special for 01-29 (samme layout i alle serier)
-  if(a === 1 && b === 29){
-    const spacer = document.createElement("div");
-    spacer.className = "gridSpacer";
-    gridEl.appendChild(spacer);
-  }
-
-  const sources = (rec?.codeSources && typeof rec.codeSources === "object") ? rec.codeSources : {};
-  const metaMap = (rec?.codeMeta && typeof rec.codeMeta === "object") ? rec.codeMeta : {};
-  const multiPid = (parsePidList(rec?.pid).length > 1);
-
-  for(let i=a;i<=b;i++){
-    const wrap = document.createElement("label");
-    wrap.className = "item";
-
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.className = "cb";
-    cb.disabled = true;
-    cb.setAttribute("disabled", "");
-
-    const codeKey = codeKeyForSeriesN(i, series);
-    cb.dataset.code = codeKey;
-
-    const isChecked = selectedSet.has(codeKey);
-    if(isChecked){
-      cb.checked = true;
-      cb.setAttribute("checked", "");
-
-      const meta = metaMap?.[codeKey] || {};
-      const src = sources?.[codeKey] || meta.source || "manual";
-      const mark = meta.mark || (src === "scan" ? "scan" : "blue");
-      cb.dataset.mark = mark;
-
-      if(multiPid){
-        const pidColor = (meta.pidColor ?? (Number.isFinite(parseInt(meta.pidIdx,10)) ? (parseInt(meta.pidIdx,10) % 4) : 0));
-        cb.dataset.pid = String(pidColor);
-      }
-    }
-
-    const code = document.createElement("span");
-    code.className = "code";
-    code.textContent = displayNumberForSeriesN(i, series);
-
-    wrap.appendChild(cb);
-    wrap.appendChild(code);
-    gridEl.appendChild(wrap);
-  }
-}
-
-function buildPaperForPrint(rec, series){
-  const base = document.getElementById("paper");
-  if(!base) return null;
-
-  const p = base.cloneNode(true);
-  p.removeAttribute("id");
-
-  // Set top fields (as attributes so they show in print)
-  const setVal = (sel, val) => {
-    const elx = p.querySelector(sel);
-    if(!elx) return;
-    const v = String(val ?? "");
-    elx.value = v;
-    elx.setAttribute("value", v);
-  };
-  setVal('#fMain', rec?.hovedkomponentnr ?? '');
-  setVal('#fDesc', rec?.beskrivelse ?? '');
-  setVal('#fPlant', rec?.anlaeg ?? '');
-  setVal('#fPid', rec?.pid ?? '');
-  setVal('#fSign1', rec?.signatur1 ?? '');
-  setVal('#fSign2', normalizeDateInputValue(rec?.signatur2 ?? '') || '');
-
-  // Series-specific layout tweaks
-  if(series !== 0){
-    p.classList.add('paper--series-nz');
-  }
-
-  const selectedSet = new Set((rec?.selectedCodes || []).map(String));
-
-  // Update range labels + rebuild grids
-  const sections = Array.from(p.querySelectorAll('.section'));
-  for(const sec of sections){
-    const grid = sec.querySelector('.grid');
-    if(!grid) continue;
-
-    const span = sec.querySelector('.secRange');
-    if(span){
-      span.textContent = formatRangeLabelForSeries(grid.dataset.range, series);
-    }
-
-    buildGridForPrint(grid, series, rec, selectedSet);
-  }
-
-  // Add a small series badge (helps when printing mixed series)
-  const badge = document.createElement('div');
-  badge.className = 'printSeriesBadge muted';
-  badge.textContent = series === 0 ? 'Serie: 0xx' : `Serie: ${series}xx`;
-  p.appendChild(badge);
-
-  return p;
-}
-
-async function printSelectedRecords(){
-  if(USE_CLOUD){
-    try{ await refreshRecords(); }catch{}
-  }
-
-  const ids = Array.from(selectedRecordIds || []);
-  if(ids.length === 0){
-    alert("Markér en eller flere poster i venstre liste (checkbox).\nTip: Du kan bruge 'Markér alle'.");
-    return;
-  }
-
-  // Optional: ask for number of copies per record
-  let copies = 1;
-  try{
-    const ans = prompt('Antal kopier pr. hovednr.? (1 = standard)', '1');
-    if(ans !== null && String(ans).trim() !== ''){
-      const n = parseInt(ans, 10);
-      if(Number.isFinite(n) && n >= 1 && n <= 10) copies = n;
-    }
-  }catch{}
-
-  const all = loadRecords();
-  const byId = new Map(all.map(r => [r.id, r]));
-  let recs = ids.map(id => byId.get(id)).filter(Boolean);
-
-  // If active record is selected, print the current in-memory version
-  if(activeId && selectedRecordIds.has(activeId)){
-    try{
-      const current = getFormData();
-      recs = recs.map(r => (r.id === activeId ? current : r));
-    }catch{}
-  }
-
-  const pages = [];
-
-  for(const rec of recs){
-    const codes = Array.isArray(rec?.selectedCodes) ? rec.selectedCodes.map(String) : [];
-    const seriesSet = new Set();
-    for(const c of codes){
-      const n = parseInt(c,10);
-      if(!Number.isFinite(n)) continue;
-      seriesSet.add(n >= 100 ? Math.floor(n/100) : 0);
-    }
-
-    let seriesList = Array.from(seriesSet).sort((a,b)=>a-b);
-    if(seriesList.length === 0){
-      // No selections -> still print one 0xx page with header filled
-      seriesList = [0];
-    }
-
-    for(let k=0;k<copies;k++){
-      for(const series of seriesList){
-        const p = buildPaperForPrint(rec, series);
-        if(!p) continue;
-        const wrap = document.createElement('div');
-        wrap.className = 'printPage';
-        wrap.appendChild(p);
-        pages.push(wrap);
-      }
-    }
-  }
-
-  if(pages.length === 0){
-    alert('Ingen sider at printe.');
-    return;
-  }
-
-  // Collect CSS (inline for robust printing)
-  let cssText = '';
-  try{
-    const r = await fetch('./styles.css', { cache: 'no-store' });
-    if(r.ok) cssText = await r.text();
-  }catch{}
-
-  const extraCss = `
-    body{ background:#fff !important; }
-    .printPage{ page-break-after: always; }
-    .printPage:last-child{ page-break-after: auto; }
-    .printPage .paper{ margin: 0 auto 16px; }
-    .paper{ box-shadow:none !important; position:relative; }
-    .paper--series-nz .grid{ column-gap: 18px; }
-    .paper--series-nz .grid .item{ gap: 6px; }
-    .printSeriesBadge{ position:absolute; right:18px; top:14px; font-size:12px; }
-  `;
-
-  const html = `<!doctype html><html lang="da"><head><meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Print</title>
-    <style>${cssText}
-${extraCss}</style>
-  </head><body></body></html>`;
-
-  const w = window.open('', '_blank');
-  if(!w){
-    alert('Popup blev blokeret. Tillad popups for at kunne printe.');
-    return;
-  }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-
-  // Append pages once window is ready
-  const mount = () => {
-    try{
-      const body = w.document.body;
-      for(const page of pages){
-        // Import nodes into the new window document
-        body.appendChild(w.document.importNode(page, true));
-      }
-      w.focus();
-      // Wait a tick so layout is ready before printing
-      setTimeout(() => { try{ w.print(); }catch{} }, 250);
-    }catch(err){
-      alert('Kunne ikke bygge print-visning: ' + (err?.message ?? err));
-    }
-  };
-
-  if(w.document.readyState === 'complete') mount();
-  else w.onload = mount;
-}
-
-
-function forceExcelTextColumns(ws, headers, rowCount){
-  const colIndex = {
-    hoved: headers.indexOf("Hovedkomponentnr."),
-    ops: headers.indexOf("Opsætning"),
-    tag: headers.indexOf("Tag"),
-  };
-  for(let r = 1; r <= rowCount; r++){
-    for(const c of [colIndex.hoved, colIndex.ops, colIndex.tag]){
-      if(c < 0) continue;
-      const addr = XLSX.utils.encode_cell({ r, c });
-      if(ws[addr]){
-        ws[addr].t = "s";
-        ws[addr].v = String(ws[addr].v ?? "");
-      }
-    }
-  }
-}
-
-function makeSafeSheetName(raw, used){
-  let name = String(raw || "Post").trim();
-  name = name.replace(/[\\/?*\[\]:]/g, "_"); // Excel invalid chars
-  if(!name) name = "Post";
-  name = name.slice(0, 31);
-
-  let out = name;
-  let i = 1;
-  while(used.has(out)){
-    const suffix = "_" + i++;
-    out = name.slice(0, Math.max(0, 31 - suffix.length)) + suffix;
-  }
-  used.add(out);
-  return out;
-}
-
-function rowsFromRecordForExcel(rec){
-  const mainRaw = String(rec?.hovedkomponentnr || "").trim();
-  const main = parseMainNumber(mainRaw);
-  if(!main) return [];
-
-  const desc = String(rec?.beskrivelse || "").trim();
-  const plant = String(rec?.anlaeg || "").trim();
-  const pid = String(rec?.pid || "").trim();
-  const signHeader = [ String(rec?.signatur1 || "").trim(), formatDateValue(rec?.signatur2 || "") ].filter(Boolean).join("; ");
-
-  const codes = Array.isArray(rec?.selectedCodes) ? rec.selectedCodes.map(String) : [];
-  codes.sort((a,b)=>parseInt(a,10)-parseInt(b,10));
-
-  const sources = (rec?.codeSources && typeof rec.codeSources === "object") ? rec.codeSources : {};
-  const metaMap = (rec?.codeMeta && typeof rec.codeMeta === "object") ? rec.codeMeta : {};
-
-  return codes.map(code => {
-    const meta = metaMap?.[code] || {};
-    const src = sources?.[code] || meta.source || "manual";
-    const mark = normalizeTagStatus(meta.mark || TAG_STATUS.ACTIVE);
-    const statusLabel = `${tagStatusSymbol(mark)} ${tagStatusLabel(mark)}`;
-    const sourceLabel = isScanSourceValue(src, meta.source || meta.mark) ? "Scan/import" : "Manuel";
-    const signature = meta.by || signHeader || rec.editedBy || "—";
-    const ops = formatOpsaetning(code);
-    const tag = buildTag(mainRaw, code);
-
-    return {
-      "Hovedkomponentnr.": main,
-      "Beskrivelse": desc,
-      "Anlæg": plant,
-      "PID Tegningsnr.": pid,
-      "PID (tag)": String(meta.pid || pid || "").trim(),
-      "Signatur": signature,
-      "Opsætning": ops,
-      "Status": statusLabel,
-      "Kilde": sourceLabel,
-      "Tag": tag,
-      "Revision": lastRevisionString(rec) || "",
-    };
-  });
-}
-
-async function exportExcelFromSelectedRecords(){
-  if(typeof XLSX === "undefined"){
-    alert("Excel-biblioteket (XLSX) er ikke indlæst. Tjek internetforbindelse eller CDN-link i index.html.");
-    return;
-  }
-
-  if(USE_CLOUD){
-    try{ await refreshRecords(); }catch{}
-  }
-
-  const ids = Array.from(selectedRecordIds || []);
-  if(ids.length === 0){
-    alert("Markér en eller flere poster i venstre liste (checkbox) eller tryk 'Markér alle'.");
-    return;
-  }
-
-  const all = loadRecords();
-  const byId = new Map(all.map(r => [r.id, r]));
-
-  let recs = ids.map(id => byId.get(id)).filter(Boolean);
-
-  // Hvis den aktive post er markeret, så brug de aktuelle felter (også hvis den ikke er gemt endnu)
-  if(activeId && selectedRecordIds.has(activeId)){
-    try{
-      const current = getFormData();
-      recs = recs.map(r => (r.id === activeId ? current : r));
-    }catch{
-      // ignore
-    }
-  }
-
-  const headers = [
-    "Hovedkomponentnr.",
-    "Beskrivelse",
-    "Anlæg",
-    "PID Tegningsnr.",
-    "PID (tag)",
-    "Signatur",
-    "Opsætning",
-    "Status",
-    "Kilde",
-    "Tag",
-    "Revision",
-  ];
-
-  const sheets = [];
-  const usedNames = new Set();
-  let allRows = [];
-
-  for(const rec of recs){
-    const rows = rowsFromRecordForExcel(rec);
-    if(!rows.length) continue;
-
-    allRows.push(...rows);
-
-    const main = parseMainNumber(rec.hovedkomponentnr || "") || "Post";
-    const sheetName = makeSafeSheetName(main, usedNames);
-
-    sheets.push({ name: sheetName, rows });
-  }
-
-  if(allRows.length === 0){
-    alert("Ingen valgte poster indeholder markerede felter at eksportere.");
-    return;
-  }
-
-  const wb = XLSX.utils.book_new();
-
-  // Samlet ark
-  const wsAll = XLSX.utils.json_to_sheet(allRows, { header: headers });
-  forceExcelTextColumns(wsAll, headers, allRows.length);
-  wsAll["!cols"] = [
-    { wch: 18 },
-    { wch: 40 },
-    { wch: 16 },
-    { wch: 18 },
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 10 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 18 },
-    { wch: 44 },
-  ];
-  XLSX.utils.book_append_sheet(wb, wsAll, makeSafeSheetName("Alle", usedNames));
-
-  // Ét ark pr. hovednummer
-  for(const s of sheets){
-    const ws = XLSX.utils.json_to_sheet(s.rows, { header: headers });
-    forceExcelTextColumns(ws, headers, s.rows.length);
-    ws["!cols"] = wsAll["!cols"];
-    XLSX.utils.book_append_sheet(wb, ws, s.name);
-  }
-
-  const today = new Date();
-  const y = String(today.getFullYear());
-  const m = String(today.getMonth()+1).padStart(2,"0");
-  const d = String(today.getDate()).padStart(2,"0");
-  const filename = `komponent-blanketter_valgte_${y}-${m}-${d}.xlsx`;
-
-  XLSX.writeFile(wb, filename);
-}
-
-
-function localDateStampForFilename(date = new Date()){
-  const y = String(date.getFullYear());
-  const m = String(date.getMonth()+1).padStart(2,"0");
-  const d = String(date.getDate()).padStart(2,"0");
-  const hh = String(date.getHours()).padStart(2,"0");
-  const mm = String(date.getMinutes()).padStart(2,"0");
-  return `${y}-${m}-${d}_${hh}${mm}`;
-}
-
-function buildJsonBackupPayload(records){
-  const user = getCurrentUser();
-  const cleanRecords = (Array.isArray(records) ? records : []).map(stripClientOnlyRecordFields);
-  return {
-    schema: "komponentdatabase.backup.v2",
-    exportedAt: new Date().toISOString(),
-    source: USE_CLOUD ? "cloud" : "local",
-    exportedBy: user?.initials || null,
-    count: cleanRecords.length,
-    records: cleanRecords,
-  };
-}
+// ---------- Print, Excel, and JSON backup tools ----------
+const {
+  printSelectedRecords,
+  exportExcelFromSelectedRecords,
+  localDateStampForFilename,
+  buildJsonBackupPayload,
+} = window.KomponentDB.exportTools.createExportTools({
+  TAG_STATUS,
+  parseRange,
+  pad2,
+  parsePidList,
+  parseMainNumber,
+  normalizeDateInputValue,
+  formatDateValue,
+  formatOpsaetning,
+  buildTag,
+  normalizeTagStatus,
+  tagStatusLabel,
+  tagStatusSymbol,
+  isScanSourceValue,
+  lastRevisionString,
+  loadRecords,
+  refreshRecords,
+  getFormData,
+  getActiveId: () => activeId,
+  getSelectedRecordIds: () => selectedRecordIds,
+  isCloudMode: () => USE_CLOUD,
+  getCurrentUser,
+  stripClientOnlyRecordFields,
+  getXLSX: () => window.XLSX,
+});
 
 el("btnExport").addEventListener("click", async () => {
   if(!requireAdmin("Kun admin kan eksportere JSON backup.")) return;
