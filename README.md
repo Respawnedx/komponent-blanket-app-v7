@@ -1,93 +1,119 @@
-# Komponent Blanket App
+# Komponentdatabase
 
-A browser-based prototype for managing component setup numbers, preventing double numbering, reserving numbers for projects, saving revision history, exporting Excel data, printing filled forms, and optionally sharing records through a Cloudflare Workers + D1 backend.
+A browser-based prototype for Arla Foods Ingredients / Danmark Protein component-number management.
 
-The user interface is written in plain HTML, CSS, and JavaScript. It can run as a static site, or it can connect to the Worker API configured in `index.html`.
+The app is built to demonstrate how the old component blanket and Access-based workflow can be replaced by a shared web system that prevents duplicate numbering, reserves project numbers, keeps revision history, and supports later migration work.
 
-## Project Structure
+## What This Prototype Does
+
+- Lets users search component records by main number, PID, plant, description, or full tag.
+- Shows setup-number ranges across `0xx` through `9xx`.
+- Tracks number states as business statuses:
+  - `I brug` for active numbers that block reuse.
+  - `Projekt` for temporary project reservations that also block reuse.
+  - `Frigivet` for released/renumbered numbers that remain visible in history but do not block availability.
+  - `Scan/import` as a source marker for numbers imported from paper, Access, Excel, or CSV.
+- Calculates free numbers in the active series.
+- Suggests suffix rows that are free across all series, so matrix-style rows are preserved.
+- Autosaves and logs status changes.
+- Keeps manual revision descriptions for deliberate master-data saves.
+- Supports Cloudflare Workers + D1 for shared records and user access.
+- Supports JSON backup, Access/Excel/CSV tag-list import, selected-record Excel export, and print/PDF output.
+
+## Live Deployment
+
+Frontend:
+
+```text
+https://respawnedx.github.io/komponent-blanket-app-v7/
+```
+
+Backend Worker:
+
+```text
+https://komponent-blanket-backend.nicklas-jensen-n.workers.dev
+```
+
+The frontend API URL is configured in `index.html` through `window.COMPONENT_APP_API`.
+
+## Repository Map
 
 ```text
 .
-├── index.html
-├── styles.css
-├── app.js
-├── server.js
-├── data/records.json
-├── assets/afi-logo.png
+├── index.html                  # Static HTML shell and modal markup
+├── styles.css                  # Full UI styling and print layout
+├── app.js                      # Frontend state, rendering, auth, import/export, autosave
+├── server.js                   # Dependency-free local static server
+├── data/records.json           # Local server data placeholder
+├── assets/
+│   └── afi-logo.png
+├── docs/
+│   ├── architecture.md         # Main programmer guide
+│   ├── deployment.md           # GitHub Pages + Cloudflare setup/runbook
+│   ├── import-formats.md       # Access/Excel/CSV and JSON backup formats
+│   └── review-notes.md         # Review findings, cleanup, and known gaps
 └── backend/
-    ├── src/index.js
-    ├── migrations/001_init.sql
-    ├── wrangler.toml
-    ├── bootstrap-admin.js
-    └── README.md
+    ├── README.md               # Worker-specific setup notes
+    ├── bootstrap-admin.js      # Generates first-admin SQL
+    ├── wrangler.toml           # Worker, D1, CORS, and variable config
+    ├── migrations/
+    │   ├── 001_init.sql
+    │   ├── 002_users_email.sql
+    │   └── 003_login_throttle.sql
+    └── src/
+        └── index.js            # Cloudflare Worker API
 ```
 
-## How the App Works
+## Documentation
 
-`index.html` defines the component form, record sidebar, revision panel, login modal, revision modal, import inputs, and the `window.COMPONENT_APP_API` setting.
+Start here if you are a developer taking over the project:
 
-`app.js` owns the application state:
+- [Architecture Guide](docs/architecture.md)
+- [Deployment Guide](docs/deployment.md)
+- [Import and Backup Formats](docs/import-formats.md)
+- [Review Notes and Known Gaps](docs/review-notes.md)
+- [Backend README](backend/README.md)
 
-- `activeId` tracks the currently loaded record.
-- `codeSource` stores whether each selected setup code came from manual input or scan/import.
-- `codeMeta` stores metadata per selected code, including status, user initials, timestamp, PID, and source.
-- `selectedRecordIds` stores sidebar multi-selection for bulk Excel export and printing.
-- `changeBuffer` temporarily tracks unsaved checkbox and metadata changes before a revision is saved.
-- `componentFormDraft_v1` in `localStorage` stores an unsaved local draft so checkbox changes can be restored if the browser closes before the user saves a revision.
+## Access Levels
 
-On startup, `app.js` checks `window.COMPONENT_APP_API`.
+The app has three user roles:
 
-- If it is set, the app runs in cloud mode and sends authenticated requests to the Worker API.
-- If it is empty, the app runs in local mode and stores records in browser `localStorage`.
+| Role | UI Label | Intended User | Access |
+| --- | --- | --- | --- |
+| `user` | `VIEW` | Viewer / normal lookup user | Search, view, print, and export selected records. No editing. |
+| `allocator` | `PLAN` | Planner / semi-admin | Can reserve and remove orange `Projekt` numbers. Can create new records only with project reservations. |
+| `admin` | `ADMIN` | System owner / data maintainer | Full access: master data, all statuses, scan/import, JSON backup, delete, and user management. |
 
-## Component Code Selection
+The frontend hides buttons based on role, and the Worker enforces the same role rules server-side.
 
-The form shows setup codes in ranges such as `01-29`, `30-39`, and so on. The series selector changes the visible code range from `0xx` through `9xx`.
+## Number Model
 
-Internally, the app stores codes as strings:
+Each record represents one main component number (`Hovedkomponentnr.`). Setup numbers are stored as strings:
 
 - `01` through `99` for the `0xx` series.
-- `101` through `999` for the other series.
+- `101` through `999` for the `1xx` through `9xx` series.
 
-When a checkbox is selected, the app records who changed it, when it changed, which number status was used, and which PID was active if multiple PID numbers are present.
+Each selected setup number has metadata in `codeMeta`, including:
 
-The prototype treats number state as business status, not just a color:
+- status (`blue`, `reserved`, `red`)
+- source (`manual` or `scan`)
+- user initials
+- timestamp
+- PID binding if more than one PID is written on the record
 
-- `I brug` / blue: an existing active number that blocks reuse.
-- `Projekt` / orange: a temporary project reservation that also blocks reuse until the project is finished or cancelled.
-- `Frigivet` / red: a released or removed number used to document renumbering history; it does not block availability.
-- `Scan/import` / green source marker: the number came from paper scan or Access/Excel import. This is a source marker layered on top of the status.
+Availability only treats `I brug` and `Projekt` as blocking. `Frigivet` is historical and does not block reuse.
 
-The availability panel shows free numbers in the active series and suggests suffix rows that are free across `0xx` through `9xx`. This helps preserve complete matrix-style number rows such as `1202.110`, `1202.210`, and so on.
+## Save and Revision Behavior
 
-## Records and Revisions
+Status changes are autosaved after a short debounce and get automatic revision entries. This means changes between blank, `I brug`, `Projekt`, and `Frigivet` are logged even if the user forgets to press **Gem ændringer**.
 
-Saving a record collects the current form fields and selected setup codes into one JSON object. Before saving, the user is asked for a short revision description. The app compares the previous saved version with the new version and writes a readable revision summary showing added, removed, and changed tags.
+Master-data fields such as description, plant, PID, and signature are kept as a local draft until the user presses **Gem ændringer**. If a draft or autosave is pending, the browser shows its standard close/refresh warning.
 
-Status changes update a local browser draft immediately and are autosaved after a short debounce. Autosaved status changes also create revision entries, so `I brug`, `Projekt`, `Frigivet`, and blank-state transitions are logged even if the user does not press the manual Save button.
-
-Master-data fields such as description, plant, PID, and signature are kept as a local draft until the user deliberately presses **Gem ændringer**. If the browser is closed while a draft or autosave is pending, the browser shows its standard unsaved-changes warning.
-
-## Import, Export, and Print
-
-The app supports:
-
-- Excel export for the active record.
-- Excel export for selected sidebar records.
-- Access/Excel/CSV tag import from `.xls`, `.xlsx`, or `.csv`.
-- Browser print/PDF for the active form or selected records.
-- OCR/image scan import for detecting marked checkboxes from a scanned form.
-- Admin-only JSON backup export/import for prototype transfer and troubleshooting.
-
-Excel/CSV support is loaded from the SheetJS CDN in `index.html`. For Microsoft Access migration, the intended prototype path is to export an Access table or query to Excel/CSV with one row per tag/allocation, then import that file into this app.
-
-See [docs/import-formats.md](docs/import-formats.md) for the exact Access/Excel/CSV tag-list format, JSON backup schema, import behavior, examples, and current migration limitations.
+The Worker uses optimistic concurrency. When the frontend saves a record, it sends the `updatedAt` timestamp it originally loaded. If the D1 row has changed since then, the Worker returns `409 Conflict` instead of silently overwriting another user's work.
 
 ## Running Locally
 
-Open `index.html` directly or serve the folder with a simple local web server. In this mode, records are stored in browser `localStorage`.
-
-The included local server has no npm dependencies:
+No npm install is required for the app itself.
 
 ```bash
 node server.js
@@ -99,75 +125,59 @@ Then open:
 http://localhost:3000
 ```
 
-The server serves the static frontend and exposes:
+For cloud-connected local testing, make sure `ALLOWED_ORIGINS` in `backend/wrangler.toml` includes the local origin you use, for example `http://localhost:3000` or `http://localhost:5500`.
 
-- `GET /api/records`
-- `POST /api/records`
+## Cloudflare Backend
 
-The current frontend does not automatically use these local `/api/records` endpoints; they are kept as a simple extension point for file-based storage.
+The Worker provides:
 
-## Cloud Mode
+- `POST /auth/login`
+- `GET /auth/me`
+- `GET /admin/users`
+- `POST /admin/users`
+- `GET /records`
+- `GET /records/:id`
+- `POST /records/upsert`
+- `DELETE /records/:id`
+- `GET /audit`
+- `POST /audit`
+- `GET /health`
 
-The frontend connects to Cloudflare by setting this value in `index.html`:
+The backend stores full record payloads in D1 while also keeping key columns for search/indexing. It also stores audit events and login-throttle counters.
 
-```html
-<script>
-  window.COMPONENT_APP_API = "https://your-worker-url.workers.dev";
-</script>
-```
+## Security Model
 
-When this value is not empty, users must log in with initials or email plus an access password. Records are stored in D1 and shared across users.
+Implemented in the prototype:
 
-The app uses three access levels:
+- Passwords are PBKDF2-hashed with random salts.
+- Tokens are HMAC-signed bearer tokens.
+- `TOKEN_SECRET` is required for authenticated routes.
+- Failed login attempts are throttled per login/IP pair and per IP hash.
+- Role checks are enforced both in frontend and backend.
+- Planner users are server-restricted to orange project reservation changes.
+- Record saves use optimistic concurrency.
+- Backend rejects duplicate main component numbers.
+- CORS is controlled by `ALLOWED_ORIGINS`.
 
-- `user` / VIEW: can log in, search, view records, print, and export Excel data. It cannot edit numbers or use JSON backup.
-- `allocator` / PLAN: can do everything VIEW can do, plus add or remove orange `Projekt` reservations and save those project changes. It can create a new record only when the selected numbers are orange project reservations. It cannot change blue/red statuses, import, scan, delete, or edit master data on existing records.
-- `admin` / ADMIN: full access. Admin can create records, maintain master data, change all statuses, import Access/Excel/CSV or scan data, export JSON backup, delete records, and manage users.
+Production work still needed:
 
-Status changes are autosaved. When a user changes a number between `I brug`, `Projekt`, `Frigivet`, or blank, the app saves the record after a short debounce and writes a revision entry automatically. The manual **Gem ændringer** button is still used for deliberate master-data updates and descriptions.
+- Real password reset with one-time tokens and approved email sending.
+- Microsoft Entra ID / SSO if the app becomes an internal enterprise system.
+- Cloudflare WAF/rate limiting in front of `/auth/login`.
+- Proper CI tests and deployment automation.
+- Split the large `app.js` into modules.
 
-See [backend/README.md](backend/README.md) for Worker deployment, D1 setup, secrets, migrations, and admin bootstrap instructions.
+## Import and Backup
 
-## Backend Overview
+The admin import modal supports:
 
-The Worker in `backend/src/index.js` provides:
+- Access/Excel/CSV tag lists using an `NR` column.
+- JSON backups downloaded from **Backup JSON**.
 
-- `POST /auth/login` for initials/email + password authentication.
-- `GET /auth/me` for checking the current token.
-- `GET /admin/users` and `POST /admin/users` for admin-only user management.
-- `GET /records`, `GET /records/:id`, `POST /records/upsert`, and `DELETE /records/:id` for shared records.
-- `GET /audit` and `POST /audit` for audit history.
-- `GET /health` for a simple health check.
+The current tag-list import is intentionally narrow: it imports tag numbers and marks them as `I brug` with source `Scan/import`. It does not yet migrate old Access descriptions, PID history, project comments, or historical revision rows.
 
-Passwords are stored as PBKDF2 hashes with a random salt. Login returns a signed bearer token. Each authenticated request verifies the token and checks that the user still exists and is not disabled.
+See [Import and Backup Formats](docs/import-formats.md) for exact examples and migration notes.
 
-The Worker also throttles failed logins per login/IP combination and per IP hash. Repeated bad credentials return `429 Too Many Requests` with a `Retry-After` header. For production, add Cloudflare WAF/rate limiting in front of `/auth/login` as the first layer against credential stuffing and request floods.
+## Current Prototype Status
 
-Read-only record routes require any valid user. Record-changing routes require `allocator` or `admin`, but the backend also enforces that `allocator` users can only change orange project reservations. New allocator-created records must contain at least one orange project reservation.
-
-The current password reset UI is a prototype mail link to the administrator. A production reset flow should add one-time reset tokens and an email provider such as Microsoft Graph, SendGrid, or another approved mail service.
-
-## Important Configuration
-
-`backend/wrangler.toml` contains:
-
-- Worker name and entry point.
-- D1 database binding.
-- `ALLOWED_ORIGINS` for CORS.
-- `TOKEN_TTL_SECONDS` for login token lifetime.
-
-Set `TOKEN_SECRET` as a Cloudflare Worker secret:
-
-```bash
-wrangler secret put TOKEN_SECRET
-```
-
-Use a long random value.
-
-## Development Notes
-
-- The frontend is deliberately dependency-light and uses browser APIs directly.
-- `app.js` is currently large because it contains state management, UI rendering, import/export, printing, auth, and API integration in one file. A future cleanup could split it into modules such as `records.js`, `api.js`, `export.js`, and `ui.js`.
-- The Worker CORS allowlist should include every production frontend origin that needs cloud access.
-- When testing the cloud-connected frontend through `node server.js`, include `http://localhost:3000` and `http://127.0.0.1:3000` in `ALLOWED_ORIGINS`.
-- The app uses Danish UI text because it is built for the component-blanket workflow, while this documentation is written in English for maintainability.
+This project is a serious functional prototype, not a final production system. It is good for demonstrating desired workflows and data behavior to future developers, but the next phase should include a proper application architecture, database model, CI/CD, formal access management, and a full Access migration design.

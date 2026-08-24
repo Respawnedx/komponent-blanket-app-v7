@@ -40,14 +40,14 @@ function serveStatic(req, res, pathname){
     "/index.html": "index.html",
     "/styles.css": "styles.css",
     "/app.js": "app.js",
-    "/README.txt": "README.txt",
+    "/README.md": "README.md",
   };
 
   let filePath = null;
 
   if(map[pathname]){
     filePath = path.resolve(ROOT, map[pathname]);
-  }else if(pathname.startsWith("/assets/")){
+  }else if(pathname.startsWith("/assets/") || pathname.startsWith("/docs/")){
     // Prevent path traversal
     const safe = pathname.replace(/^\/+/, "");
     filePath = path.resolve(ROOT, safe);
@@ -64,6 +64,7 @@ function serveStatic(req, res, pathname){
     ".html":"text/html; charset=utf-8",
     ".css":"text/css; charset=utf-8",
     ".js":"application/javascript; charset=utf-8",
+    ".md":"text/markdown; charset=utf-8",
     ".txt":"text/plain; charset=utf-8",
     ".json":"application/json; charset=utf-8",
     ".png":"image/png",

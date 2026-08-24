@@ -14,6 +14,23 @@ function normalizeRole(role) {
   return "user";
 }
 
+function getTokenSecret(env) {
+  return String(env?.TOKEN_SECRET || "").trim();
+}
+
+function constantTimeEqual(a, b) {
+  const left = String(a || "");
+  const right = String(b || "");
+  let diff = left.length ^ right.length;
+  const len = Math.max(left.length, right.length);
+
+  for (let i = 0; i < len; i++) {
+    diff |= (left.charCodeAt(i) || 0) ^ (right.charCodeAt(i) || 0);
+  }
+
+  return diff === 0;
+}
+
 function canWriteRecords(user) {
   const role = normalizeRole(user?.role);
   return role === "admin" || role === "allocator";
@@ -138,6 +155,16 @@ function validateSingleMainNumber(raw) {
   return { ok: true, main: parseMainNumber(str) };
 }
 
+async function findDuplicateMainRecord(env, hoved, currentId) {
+  const normalized = stripLeadingZeros(hoved);
+  if (!normalized) return null;
+
+  const { results } = await env.DB.prepare(
+    "SELECT id, hovedkomponentnr FROM records WHERE id<>?"
+  ).bind(String(currentId)).all();
+
+  return (results || []).find(row => stripLeadingZeros(row?.hovedkomponentnr) === normalized) || null;
+}
 
 function toHex(buf) {
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
@@ -221,7 +248,7 @@ function clientIpFromRequest(request) {
 }
 
 async function throttleHash(env, value) {
-  return hmacSha256Hex(env.TOKEN_SECRET || "login-throttle", String(value || "unknown"));
+  return hmacSha256Hex(getTokenSecret(env), String(value || "unknown"));
 }
 
 async function loginThrottleKeys(env, request, login) {
@@ -310,8 +337,6 @@ function corsHeaders(origin, allowed) {
   if (origin) {
     if (allowed && allowed.length) {
       if (allowed.includes("*") || allowed.includes(origin)) allowOrigin = allowed.includes("*") ? "*" : origin;
-    } else {
-      allowOrigin = origin;
     }
   } else {
     allowOrigin = "*";
@@ -352,16 +377,18 @@ function getBearerToken(request) {
 async function signToken(env, payloadObj) {
   const payloadBytes = new TextEncoder().encode(JSON.stringify(payloadObj));
   const payload = base64UrlEncode(payloadBytes);
-  const sig = await hmacSha256Hex(env.TOKEN_SECRET, payload);
+  const sig = await hmacSha256Hex(getTokenSecret(env), payload);
   return `${payload}.${sig}`;
 }
 
 async function verifyToken(env, token) {
   if (!token || token.indexOf(".") === -1) return null;
-  const [payload, sig] = token.split(".");
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [payload, sig] = parts;
   if (!payload || !sig) return null;
-  const expect = await hmacSha256Hex(env.TOKEN_SECRET, payload);
-  if (expect !== sig) return null;
+  const expect = await hmacSha256Hex(getTokenSecret(env), payload);
+  if (!constantTimeEqual(expect, sig)) return null;
 
   let obj;
   try {
@@ -424,6 +451,10 @@ export default {
       return jsonResponse({ ok: true, ts: nowIso() }, origin, allowed);
     }
 
+    if (!getTokenSecret(env)) {
+      return jsonResponse({ error: "TOKEN_SECRET is not configured" }, origin, allowed, 500);
+    }
+
     // --- Auth ---
     if (url.pathname === "/auth/login" && request.method === "POST") {
       const body = await readJson(request);
@@ -473,7 +504,7 @@ export default {
       }
 
       const calc = await pbkdf2Hash(password, row.pin_salt);
-      if (calc !== row.pin_hash) {
+      if (!constantTimeEqual(calc, row.pin_hash)) {
         await recordLoginFailure(env, throttleKeys);
         await writeAudit(env, {
           initials: row.initials || "AUTH",
@@ -616,6 +647,16 @@ export default {
           currentUpdatedAt: existing.updated_at,
           currentUpdatedBy: existing.updated_by || null,
           record: currentRecord,
+        }, origin, allowed, 409);
+      }
+
+      const duplicateMain = await findDuplicateMainRecord(env, hoved, rec.id);
+      if (duplicateMain) {
+        return jsonResponse({
+          error: `Main component number ${hoved} already exists in another record.`,
+          duplicate: true,
+          existingRecordId: duplicateMain.id,
+          existingMain: duplicateMain.hovedkomponentnr || null,
         }, origin, allowed, 409);
       }
 

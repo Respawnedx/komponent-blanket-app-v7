@@ -52,7 +52,7 @@ Set the token signing secret:
 wrangler secret put TOKEN_SECRET
 ```
 
-Use a long random value.
+Use a long random value. Authenticated routes return HTTP 500 if `TOKEN_SECRET` is missing, because the Worker must never sign or verify tokens with an implicit fallback secret.
 
 `wrangler.toml` also contains:
 
@@ -66,6 +66,8 @@ Example:
 ALLOWED_ORIGINS = "https://respawnedx.github.io,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5500,http://127.0.0.1:5500"
 TOKEN_TTL_SECONDS = "604800"
 ```
+
+Keep `ALLOWED_ORIGINS` explicit. The Worker does not allow arbitrary browser origins when this variable is empty.
 
 ## Deploy
 
@@ -165,6 +167,12 @@ Records are stored as structured columns for indexing plus the full JSON payload
 
 `POST /records/upsert` sets server-authoritative `editedBy` and `updatedAt` values before storing the record.
 
+The route also enforces:
+
+- optimistic concurrency through the submitted base `updatedAt` value
+- duplicate main-component-number rejection
+- planner-only mutation restrictions
+
 `GET /records` and `GET /records/:id` require any valid logged-in user. `POST /records/upsert` requires `allocator` or `admin`; the server verifies that `allocator` users only change orange project reservations. New allocator-created records must contain at least one orange project reservation. `DELETE /records/:id` requires `admin`.
 
 ### Audit
@@ -181,6 +189,7 @@ Writing audit rows through `POST /audit` requires `allocator` or `admin`.
 
 - Passwords are hashed with PBKDF2 and a random salt.
 - Tokens are signed with `TOKEN_SECRET`.
+- Password hash and token signature comparisons use constant-time comparison.
 - Every protected route verifies the token and checks that the user still exists and is not disabled.
 - Failed login throttling uses hashed login/IP keys so raw IP addresses are not stored in the throttle table.
 - CORS is controlled by `ALLOWED_ORIGINS`; add local development origins there when testing.

@@ -1,10 +1,6 @@
-// Simple local-only "app" to match the scanned UX.
-// - Builds checkbox grids for the ranges
-// - Shows selected codes
-// - Saves/loads multiple records to localStorage
-// - Exports JSON
-//
-// No backend required.
+// Komponentdatabase frontend.
+// The app can run in cloud mode against the Cloudflare Worker configured in index.html,
+// or in local fallback mode with browser localStorage if no API URL is configured.
 
 const STORAGE_KEY = "componentFormRecords_v1";
 const DRAFT_KEY = "componentFormDraft_v1";
@@ -149,10 +145,6 @@ function getCurrentPidValue(){
   if(!pidOptions.length) return null;
   const idx = Math.max(0, Math.min(pidOptions.length-1, currentPidIdx));
   return pidOptions[idx] || pidOptions[0] || null;
-}
-
-function getCurrentPidColorIdx(){
-  return (pidOptions.length > 1) ? (Math.max(0,currentPidIdx) % 4) : null;
 }
 
 function setPidIndex(idx){
@@ -351,13 +343,6 @@ function getRecMark(rec, code){
   const src = rec.codeSources || {};
   const meta = rec.codeMeta || {};
   return normalizeTagStatus(meta?.[code]?.mark || TAG_STATUS.ACTIVE);
-}
-
-function isRecScanSource(rec, code){
-  if(!rec) return false;
-  const src = rec.codeSources || {};
-  const meta = rec.codeMeta || {};
-  return isScanSourceValue(src?.[code], meta?.[code]?.source || meta?.[code]?.mark);
 }
 
 function getRecPid(rec, code){
@@ -864,13 +849,10 @@ function setEditingEnabled(){
   getAllCheckboxes().forEach(cb => cb.disabled = !canMark);
 
   setButtonAccess("btnSave", !!user && canSaveRecords(user), !!user && canSaveRecords(user));
-  setButtonAccess("btnNew", canCreate, canCreate);
   setButtonAccess("btnNewSide", canCreate, canCreate);
   setButtonAccess("btnOCR", admin && canScanPaper(user), admin && canScanPaper(user));
   setButtonAccess("btnImport", admin && canImportData(user), admin && canImportData(user));
   setButtonAccess("btnExport", admin && canExportBackup(user), admin && canExportBackup(user));
-  setButtonAccess("btnExportExcel", !!user, !!user);
-  setButtonAccess("btnPrint", !!user, !!user);
   setButtonAccess("btnLoad", !!user, !!user);
 
   const saveBtn = document.getElementById("btnSave");
@@ -2016,7 +1998,6 @@ const btnImportDataClose = document.getElementById("btnImportDataClose");
 const btnImportTagList = document.getElementById("btnImportTagList");
 const btnImportJsonBackup = document.getElementById("btnImportJsonBackup");
 const excelTagsFile = document.getElementById("excelTagsFile");
-const btnImportExcelTags = document.getElementById("btnImportExcelTags");
 
 function openImportDataModal(){
   if(!requireAdmin("Kun admin kan importere Access/Excel/JSON data.")) return;
@@ -2315,10 +2296,6 @@ async function importTagsFromExcel(file){
   }
 }
 
-if(btnImportExcelTags && excelTagsFile){
-  btnImportExcelTags.addEventListener("click", () => excelTagsFile.click());
-}
-
 if(excelTagsFile){
   excelTagsFile.addEventListener("change", async () => {
     const file = excelTagsFile.files?.[0];
@@ -2353,52 +2330,53 @@ scanFile.addEventListener("change", async () => {
   try{
     // Scan/OCR matcher kun blanketten (01-99)
     setSeries(0);
+    const prevRec = activeId ? JSON.parse(JSON.stringify(loadRecords().find(r => r.id === activeId) || null)) : null;
 
     const img = await loadImageFromFile(file);
 
     // Build a canvas in the same coordinate system as the paper area.
-// Step 1: draw the image to a temp canvas (scaled down if huge)
-const MAX_W = 1800;
-const scale = Math.min(1, MAX_W / img.naturalWidth);
-const tmp = document.createElement("canvas");
-tmp.width = Math.round(img.naturalWidth * scale);
-tmp.height = Math.round(img.naturalHeight * scale);
-const tctx = tmp.getContext("2d", { willReadFrequently:true });
-tctx.drawImage(img, 0, 0, tmp.width, tmp.height);
+    // Step 1: draw the image to a temp canvas (scaled down if huge).
+    const MAX_W = 1800;
+    const scale = Math.min(1, MAX_W / img.naturalWidth);
+    const tmp = document.createElement("canvas");
+    tmp.width = Math.round(img.naturalWidth * scale);
+    tmp.height = Math.round(img.naturalHeight * scale);
+    const tctx = tmp.getContext("2d", { willReadFrequently:true });
+    tctx.drawImage(img, 0, 0, tmp.width, tmp.height);
 
-// Step 2: auto-crop to content (removes browser UI / margins)
-const cropped = cropToContent(tmp);
+    // Step 2: auto-crop to content (removes browser UI / margins).
+    const cropped = cropToContent(tmp);
 
-// Step 3: map to the paper coordinate system
-const paper = document.getElementById("paper");
-const rect = paper.getBoundingClientRect();
-const w = Math.round(rect.width);
-const h = Math.round(rect.height);
+    // Step 3: map to the paper coordinate system.
+    const paper = document.getElementById("paper");
+    const rect = paper.getBoundingClientRect();
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
 
-const canvas = document.createElement("canvas");
-canvas.width = w;
-canvas.height = h;
-const ctx = canvas.getContext("2d", { willReadFrequently:true });
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently:true });
 
-// Keep aspect ratio: fit cropped image inside paper
-ctx.fillStyle = "white";
-ctx.fillRect(0,0,w,h);
-const arImg = cropped.width / cropped.height;
-const arPaper = w / h;
+    // Keep aspect ratio: fit cropped image inside paper.
+    ctx.fillStyle = "white";
+    ctx.fillRect(0,0,w,h);
+    const arImg = cropped.width / cropped.height;
+    const arPaper = w / h;
 
-let dw, dh, dx, dy;
-if(arImg > arPaper){
-  dw = w;
-  dh = Math.round(w / arImg);
-  dx = 0;
-  dy = Math.round((h - dh)/2);
-}else{
-  dh = h;
-  dw = Math.round(h * arImg);
-  dy = 0;
-  dx = Math.round((w - dw)/2);
-}
-ctx.drawImage(cropped, 0, 0, cropped.width, cropped.height, dx, dy, dw, dh);
+    let dw, dh, dx, dy;
+    if(arImg > arPaper){
+      dw = w;
+      dh = Math.round(w / arImg);
+      dx = 0;
+      dy = Math.round((h - dh)/2);
+    }else{
+      dh = h;
+      dw = Math.round(h * arImg);
+      dy = 0;
+      dx = Math.round((w - dw)/2);
+    }
+    ctx.drawImage(cropped, 0, 0, cropped.width, cropped.height, dx, dy, dw, dh);
 
     const detected = detectCheckedCodesFromCanvas(canvas, paper);
 
@@ -2422,30 +2400,35 @@ ctx.drawImage(cropped, 0, 0, cropped.width, cropped.height, dx, dy, dw, dh);
     updateSelectedCodes();
     saveDraft("scan-import");
 
-    // Log scan apply
-    const recExisting = activeId ? loadRecords().find(r => r.id === activeId) : null;
-    const audit = Array.isArray(recExisting?.audit) ? [...recExisting.audit] : [];
-    audit.push({
-      at: now,
-      by: user.initials,
-      action: "OCR_APPLY",
-      detectedCount: detected.length,
-      detected,
-    });
+    if(activeId && prevRec){
+      const rec = getFormData();
+      const changes = computeTagChanges(prevRec, rec);
+      const revisionDesc = "Scan/import fra papir";
 
-    // Merge audit into current record (without forcing save)
-    if(activeId && recExisting){
-      recExisting.audit = audit;
-      recExisting.selectedCodes = getSelectedCodes();
-      recExisting.codeSources = {...codeSource};
-      recExisting.codeMeta = {...codeMeta};
-      recExisting.editedBy = user.initials;
-      recExisting.updatedAt = now;
-      upsertRecord(recExisting);
+      rec.audit.push({
+        at: now,
+        by: user.initials,
+        action: "OCR_APPLY",
+        detectedCount: detected.length,
+        detected,
+      });
+      rec.revisions.push({ at: rec.updatedAt, by: user.initials, desc: revisionDesc, changes });
+
+      await upsertRecord(rec);
+      const savedRec = loadRecords().find(r => r.id === rec.id) || rec;
+      activeId = rec.id;
+      loadedRecordUpdatedAt = savedRec.updatedAt || rec.updatedAt || null;
       renderRecordList();
+      renderRevisions(savedRec);
+      await logAudit({
+        action: "OCR_APPLY",
+        record_id: rec.id,
+        hovednr: rec.hovedkomponentnr || null,
+        meta: { detectedCount: detected.length, revision: revisionDesc, changes },
+      });
 
-      // OCR handler already persisted this record update
       changeBuffer = [];
+      clearDraft();
     }
 
     alert(`OCR færdig: fandt ${detected.length} markerede felter.\nTjek resultatet og ret manuelt hvis nødvendigt.`);
@@ -3127,7 +3110,6 @@ function startNewPost(){
   setEditingEnabled();
 }
 
-el("btnNew")?.addEventListener("click", startNewPost);
 btnNewSide?.addEventListener("click", startNewPost);
 
 async function saveCurrentRecord(options = {}){
@@ -3250,6 +3232,11 @@ async function saveCurrentRecord(options = {}){
     return true;
   }catch(err){
     if(err?.status === 409){
+      if(err?.payload?.duplicate){
+        if(isAuto) updateSyncBadge("Autosave stoppet: dublet hovednr.");
+        else alert(`Der findes allerede en anden post med hovednummer ${err.payload.existingMain || fields.main.value}. Opdater data og åbn den eksisterende post.`);
+        return false;
+      }
       if(isAuto) updateSyncBadge("Autosave stoppet: posten er ændret af en anden");
       else alert("Posten er ændret af en anden bruger siden du åbnede den. Tryk Opdater data og åbn posten igen, før du gemmer.");
       return false;
@@ -3320,118 +3307,6 @@ el("btnLoad").addEventListener("click", async () => {
   setFormData(records[0]); // newest
   renderRecordList();
 });
-
-
-// ---------- Excel export (XLSX) ----------
-function exportExcelFromCurrent(){
-  const mainRaw = (fields.main.value || "").trim();
-  const vMain = validateSingleMainNumber(mainRaw);
-  if(!vMain.ok){ alert(vMain.message); return; }
-  const main = parseMainNumber(mainRaw);
-  const desc = (fields.desc.value || "").trim();
-  const plant = (fields.plant.value || "").trim();
-  const pid = (fields.pid.value || "").trim();
-  const signHeader = [ (fields.sign1.value||"").trim(), formatDateValue(getDateFieldValue(fields.sign2)) ].filter(Boolean).join("; ");
-  const revStr = activeId ? (lastRevisionString(loadRecords().find(r => r.id === activeId) || null) || "") : "";
-
-  const codes = getSelectedCodes();
-  if(!main){
-    alert("Udfyld først 'Hovedkomponentnr.' (start med tal, fx 00075) før eksport.");
-    return;
-  }
-  if(typeof XLSX === "undefined"){
-    alert("Excel-biblioteket (XLSX) er ikke indlæst. Tjek internetforbindelse eller CDN-link i index.html.");
-    return;
-  }
-  if(codes.length === 0){
-    alert("Der er ingen krydser valgt at eksportere.");
-    return;
-  }
-
-  const rows = codes.map(code => {
-    const meta = codeMeta?.[code] || {};
-    const signature = meta?.by || signHeader || "—";
-    const mark = normalizeTagStatus(meta.mark || TAG_STATUS.ACTIVE);
-    const statusLabel = `${tagStatusSymbol(mark)} ${tagStatusLabel(mark)}`;
-    const sourceLabel = isScanSourceForCode(code) ? "Scan/import" : "Manuel";
-    const ops = formatOpsaetning(code);
-    const tag = buildTag(mainRaw, code);
-
-    return {
-      "Hovedkomponentnr.": main,     // gem som tekst (bevarer evt. foranstillede 0'er)
-      "Beskrivelse": desc,
-      "Anlæg": plant,
-      "PID Tegningsnr.": pid,
-      "PID (tag)": String(meta.pid || pid || "").trim(),
-      "Signatur": signature,
-      "Opsætning": ops,              // 01 / 101 / 201 ...
-      "Status": statusLabel,         // I brug / Projekt / Frigivet
-      "Kilde": sourceLabel,          // Manuel / Scan-import
-      "Tag": tag,                    // 27.01 / 27.101 ...
-      "Revision": revStr,
-    };
-  });
-
-  const headers = [
-    "Hovedkomponentnr.",
-    "Beskrivelse",
-    "Anlæg",
-    "PID Tegningsnr.",
-    "PID (tag)",
-    "Signatur",
-    "Opsætning",
-    "Status",
-    "Kilde",
-    "Tag",
-    "Revision",
-  ];
-
-  const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
-
-  // Tving tekst-format på kolonner der ellers kan blive tolket som tal/dato (bevarer 00075 + 27.01)
-  const colIndex = {
-    hoved: headers.indexOf("Hovedkomponentnr."),
-    ops: headers.indexOf("Opsætning"),
-    tag: headers.indexOf("Tag"),
-  };
-  for(let r = 1; r <= rows.length; r++){
-    for(const c of [colIndex.hoved, colIndex.ops, colIndex.tag]){
-      const addr = XLSX.utils.encode_cell({ r, c });
-      if(ws[addr]){
-        ws[addr].t = "s";
-        ws[addr].v = String(ws[addr].v ?? "");
-      }
-    }
-  }
-
-  // Make columns a bit wider
-  ws["!cols"] = [
-    { wch: 18 },
-    { wch: 40 },
-    { wch: 16 },
-    { wch: 18 },
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 10 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 18 },
-    { wch: 44 },
-  ];
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Komponenter");
-
-  const today = new Date();
-  const y = String(today.getFullYear());
-  const m = String(today.getMonth()+1).padStart(2,"0");
-  const d = String(today.getDate()).padStart(2,"0");
-  const safeMain = main.replace(/[^a-z0-9\-_.]+/gi,"_");
-  const filename = `komponent-blanket_${safeMain}_${y}-${m}-${d}.xlsx`;
-
-  XLSX.writeFile(wb, filename);
-}
-
 
 // ---------- Print (valgte poster) ----------
 function codeKeyForSeriesN(i, series){
@@ -3857,8 +3732,6 @@ async function exportExcelFromSelectedRecords(){
 }
 
 
-el("btnPrint")?.addEventListener("click", () => window.print());
-
 function localDateStampForFilename(date = new Date()){
   const y = String(date.getFullYear());
   const m = String(date.getMonth()+1).padStart(2,"0");
@@ -3895,8 +3768,6 @@ el("btnExport").addEventListener("click", async () => {
   a.click();
   URL.revokeObjectURL(a.href);
 });
-
-el("btnExportExcel")?.addEventListener("click", exportExcelFromCurrent);
 
 if(btnExportExcelSelected){
   btnExportExcelSelected.addEventListener("click", exportExcelFromSelectedRecords);
