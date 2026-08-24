@@ -43,6 +43,7 @@ const selectedRecordCountEl = document.getElementById("selectedRecordCount");
 let selectedRecordIds = new Set();
 
 let activeId = null;
+let loadedRecordUpdatedAt = null;
 // codeSource: {'01':'scan'|'manual'} for currently checked codes
 let codeSource = {};
 // codeMeta: {'01': {by:'AB', at:'ISO', source:'manual'|'scan'}} for currently checked codes
@@ -728,7 +729,10 @@ async function apiFetch(path, opts = {}){
 
   if(!res.ok){
     const msg = (payload && payload.error) ? payload.error : (typeof payload === "string" ? payload : res.statusText);
-    throw new Error(msg || `HTTP ${res.status}`);
+    const err = new Error(msg || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.payload = payload;
+    throw err;
   }
   return payload;
 }
@@ -1435,6 +1439,7 @@ function applyCheckChange(codeKey, checked, markOverride=null){
 
 function clearForm(){
   activeId = null;
+  loadedRecordUpdatedAt = null;
   changeBuffer = [];
   codeMeta = {};
   codeSource = {};
@@ -1470,6 +1475,7 @@ function getFormData(){
     codeMeta: {},                          // filled below
     editedBy: user?.initials ?? "—",
     updatedAt: nowIso,
+    _baseUpdatedAt: loadedRecordUpdatedAt || existing?.updatedAt || null,
     audit: Array.isArray(existing?.audit) ? [...existing.audit] : [],
     revisions: Array.isArray(existing?.revisions) ? [...existing.revisions] : [],
   };
@@ -1529,6 +1535,7 @@ function getFormData(){
 
 function setFormData(rec){
   activeId = rec.id;
+  loadedRecordUpdatedAt = rec.updatedAt || null;
   changeBuffer = [];
 
   fields.main.value = rec.hovedkomponentnr ?? "";
@@ -1605,6 +1612,13 @@ function loadRecords(){
   return USE_CLOUD ? recordsCache : loadRecordsLocal();
 }
 
+function stripClientOnlyRecordFields(rec){
+  const out = { ...(rec || {}) };
+  delete out._baseUpdatedAt;
+  delete out.baseUpdatedAt;
+  return out;
+}
+
 // Fetch records into cache (cloud) without changing the current UI state.
 async function fetchRecordsCache(){
   if(!USE_CLOUD) return;
@@ -1637,11 +1651,18 @@ async function refreshRecords(){
 
 async function upsertRecord(rec){
   updateSyncBadge(USE_CLOUD ? "Gemmer..." : "Gemmer lokalt...");
+  const existing = rec?.id ? loadRecords().find(r => r.id === rec.id) : null;
+  const requestRec = { ...(rec || {}) };
+  if(!requestRec._baseUpdatedAt && !requestRec.baseUpdatedAt && existing?.updatedAt){
+    requestRec._baseUpdatedAt = existing.updatedAt;
+  }
+
   if(!USE_CLOUD){
+    const localRec = stripClientOnlyRecordFields(requestRec);
     const records = loadRecordsLocal();
-    const idx = records.findIndex(r => r.id === rec.id);
-    if(idx >= 0) records[idx] = rec;
-    else records.unshift(rec);
+    const idx = records.findIndex(r => r.id === localRec.id);
+    if(idx >= 0) records[idx] = localRec;
+    else records.unshift(localRec);
     saveRecordsLocal(records);
     updateSyncBadge("Gemt lokalt");
     return records;
@@ -1649,10 +1670,10 @@ async function upsertRecord(rec){
 
   const data = await apiFetch("/records/upsert", {
     method: "POST",
-    body: JSON.stringify(rec),
+    body: JSON.stringify(requestRec),
   });
 
-  const saved = data?.record || rec;
+  const saved = stripClientOnlyRecordFields(data?.record || rec);
   const idx = recordsCache.findIndex(r => r.id === saved.id);
   if(idx >= 0) recordsCache[idx] = saved;
   else recordsCache.unshift(saved);
@@ -1718,6 +1739,7 @@ function saveDraft(reason = "edit"){
     userInitials: user.initials,
     role: normalizeRole(user.role),
     activeId,
+    loadedRecordUpdatedAt,
     currentSeries,
     currentFilter,
     currentMark,
@@ -1755,6 +1777,7 @@ function restoreDraft(draft){
   if(!draft || !draftHasContent(draft)) return false;
 
   activeId = draft.activeId || null;
+  loadedRecordUpdatedAt = draft.loadedRecordUpdatedAt || null;
   changeBuffer = Array.isArray(draft.changeBuffer) ? [...draft.changeBuffer] : [];
   codeSource = (draft.codeSource && typeof draft.codeSource === "object") ? { ...draft.codeSource } : {};
   codeMeta = (draft.codeMeta && typeof draft.codeMeta === "object") ? { ...draft.codeMeta } : {};
@@ -1776,6 +1799,7 @@ function restoreDraft(draft){
   updateSelectedCodes();
 
   const rec = activeId ? loadRecords().find(r => r.id === activeId) : null;
+  if(!loadedRecordUpdatedAt && rec?.updatedAt) loadedRecordUpdatedAt = rec.updatedAt;
   renderRevisions(rec || null);
   renderRecordList();
   updateSyncBadge("Kladde gendannet");
@@ -1797,6 +1821,23 @@ function maybeOfferDraftRestore(){
     clearDraft();
   }
 }
+
+function hasUnsavedLocalState(){
+  if(autoSaveInFlight || autoSaveQueued || (Array.isArray(changeBuffer) && changeBuffer.length)) return true;
+
+  const draft = readDraft();
+  if(!draftHasContent(draft)) return false;
+
+  const user = getCurrentUser();
+  if(draft.userInitials && user?.initials && draft.userInitials !== user.initials) return false;
+  return true;
+}
+
+window.addEventListener("beforeunload", (event) => {
+  if(!hasUnsavedLocalState()) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
 
 
 // ---------- List rendering ----------
@@ -1970,15 +2011,43 @@ function escapeHtml(s){
 
 // Import JSON (backup)
 const importFile = document.getElementById("importFile");
-document.getElementById("btnImport").addEventListener("click", () => {
+const importDataModal = document.getElementById("importDataModal");
+const btnImportDataClose = document.getElementById("btnImportDataClose");
+const btnImportTagList = document.getElementById("btnImportTagList");
+const btnImportJsonBackup = document.getElementById("btnImportJsonBackup");
+const excelTagsFile = document.getElementById("excelTagsFile");
+const btnImportExcelTags = document.getElementById("btnImportExcelTags");
+
+function openImportDataModal(){
   if(!requireAdmin("Kun admin kan importere Access/Excel/JSON data.")) return;
-  const choice = prompt(
-    "Importér data\n\n1 = Access/Excel/CSV tagliste\n2 = JSON backup\n\nSkriv 1 eller 2:",
-    "1"
-  );
-  if(choice === null) return;
-  if(String(choice).trim() === "2") importFile.click();
-  else excelTagsFile.click();
+  importDataModal?.setAttribute("aria-hidden", "false");
+}
+
+function closeImportDataModal(){
+  importDataModal?.setAttribute("aria-hidden", "true");
+}
+
+function extractRecordsFromBackupPayload(payload){
+  if(Array.isArray(payload)) return payload;
+  if(Array.isArray(payload?.records)) return payload.records;
+  if(Array.isArray(payload?.database?.records)) return payload.database.records;
+  throw new Error("JSON backup skal indeholde en liste af poster eller et records-felt.");
+}
+
+document.getElementById("btnImport")?.addEventListener("click", openImportDataModal);
+btnImportDataClose?.addEventListener("click", closeImportDataModal);
+importDataModal?.querySelector(".modal__backdrop")?.addEventListener("click", closeImportDataModal);
+
+btnImportTagList?.addEventListener("click", () => {
+  if(!requireAdmin("Kun admin kan importere Access/Excel/CSV data.")) return;
+  closeImportDataModal();
+  excelTagsFile?.click();
+});
+
+btnImportJsonBackup?.addEventListener("click", () => {
+  if(!requireAdmin("Kun admin kan importere JSON backup.")) return;
+  closeImportDataModal();
+  importFile?.click();
 });
 
 importFile.addEventListener("change", async () => {
@@ -1991,7 +2060,7 @@ importFile.addEventListener("change", async () => {
   }
   try{
     const text = await file.text();
-    const records = JSON.parse(text);
+    const records = extractRecordsFromBackupPayload(JSON.parse(text));
     if(!Array.isArray(records)) throw new Error("JSON skal være en liste (array) af poster.");
 
     if(USE_CLOUD){
@@ -2029,9 +2098,6 @@ importFile.addEventListener("change", async () => {
 });
 
 // Import Excel (.xls/.xlsx) med kolonnen 'NR' (tags)
-const excelTagsFile = document.getElementById("excelTagsFile");
-const btnImportExcelTags = document.getElementById("btnImportExcelTags");
-
 function ensureRecordShape(rec){
   if(!rec || typeof rec !== "object") return;
   if(!Array.isArray(rec.selectedCodes)) rec.selectedCodes = [];
@@ -2251,7 +2317,9 @@ async function importTagsFromExcel(file){
 
 if(btnImportExcelTags && excelTagsFile){
   btnImportExcelTags.addEventListener("click", () => excelTagsFile.click());
+}
 
+if(excelTagsFile){
   excelTagsFile.addEventListener("change", async () => {
     const file = excelTagsFile.files?.[0];
     if(!file) return;
@@ -3158,6 +3226,8 @@ async function saveCurrentRecord(options = {}){
   try{
     await upsertRecord(rec);
     activeId = rec.id;
+    const savedRec = loadRecords().find(r => r.id === rec.id) || rec;
+    loadedRecordUpdatedAt = savedRec.updatedAt || rec.updatedAt || null;
     renderRecordList();
     changeBuffer = [];
     clearDraft();
@@ -3171,7 +3241,7 @@ async function saveCurrentRecord(options = {}){
       meta: { selectedCount: (rec.selectedCodes||[]).length, revision: revDesc, changes }
     });
 
-    renderRevisions(rec);
+    renderRevisions(savedRec);
     if(isAuto){
       updateSyncBadge(USE_CLOUD ? "Autosave gemt" : "Autosave gemt lokalt");
     }else{
@@ -3179,6 +3249,11 @@ async function saveCurrentRecord(options = {}){
     }
     return true;
   }catch(err){
+    if(err?.status === 409){
+      if(isAuto) updateSyncBadge("Autosave stoppet: posten er ændret af en anden");
+      else alert("Posten er ændret af en anden bruger siden du åbnede den. Tryk Opdater data og åbn posten igen, før du gemmer.");
+      return false;
+    }
     if(isAuto) updateSyncBadge("Autosave fejlede");
     else alert("Kunne ikke gemme: " + (err?.message ?? err));
     return false;
@@ -3784,16 +3859,39 @@ async function exportExcelFromSelectedRecords(){
 
 el("btnPrint")?.addEventListener("click", () => window.print());
 
+function localDateStampForFilename(date = new Date()){
+  const y = String(date.getFullYear());
+  const m = String(date.getMonth()+1).padStart(2,"0");
+  const d = String(date.getDate()).padStart(2,"0");
+  const hh = String(date.getHours()).padStart(2,"0");
+  const mm = String(date.getMinutes()).padStart(2,"0");
+  return `${y}-${m}-${d}_${hh}${mm}`;
+}
+
+function buildJsonBackupPayload(records){
+  const user = getCurrentUser();
+  const cleanRecords = (Array.isArray(records) ? records : []).map(stripClientOnlyRecordFields);
+  return {
+    schema: "komponentdatabase.backup.v2",
+    exportedAt: new Date().toISOString(),
+    source: USE_CLOUD ? "cloud" : "local",
+    exportedBy: user?.initials || null,
+    count: cleanRecords.length,
+    records: cleanRecords,
+  };
+}
+
 el("btnExport").addEventListener("click", async () => {
   if(!requireAdmin("Kun admin kan eksportere JSON backup.")) return;
   if(USE_CLOUD){
     try{ await refreshRecords(); }catch{}
   }
   const records = loadRecords();
-  const blob = new Blob([JSON.stringify(records, null, 2)], {type:"application/json"});
+  const backup = buildJsonBackupPayload(records);
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type:"application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "komponent-blanketter.json";
+  a.download = `komponentdatabase-backup-${localDateStampForFilename()}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 });

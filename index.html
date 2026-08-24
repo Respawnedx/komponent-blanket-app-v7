@@ -133,15 +133,24 @@
           </div>
           <div class="fieldRow">
             <label class="label">Beskrivelse</label>
-            <input id="fDesc" class="field" />
+            <div class="fieldStack">
+              <input id="fDesc" class="field" placeholder="Fx Luftudskiller" />
+              <div class="fieldHelp">Kort komponentbeskrivelse, fx Luftudskiller.</div>
+            </div>
           </div>
           <div class="fieldRow">
             <label class="label">Anlæg</label>
-            <input id="fPlant" class="field" />
+            <div class="fieldStack">
+              <input id="fPlant" class="field" placeholder="Fx Isvand 3" />
+              <div class="fieldHelp">Anlægsområde eller proceslinje, fx Isvand 3.</div>
+            </div>
           </div>
           <div class="fieldRow">
             <label class="label">PID Tegningsnr.</label>
-            <input id="fPid" class="field" />
+            <div class="fieldStack">
+              <input id="fPid" class="field" placeholder="Fx 1756;1785" />
+              <div class="fieldHelp">Flere PID-numre kan skrives med semikolon, fx 1756;1785.</div>
+            </div>
           </div>
           <div class="fieldRow">
             <label class="label">Signatur</label>
@@ -354,6 +363,35 @@
   <input id="importFile" type="file" accept="application/json" style="display:none" />
   <input id="excelTagsFile" type="file" accept=".xls,.xlsx,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" style="display:none" />
   <input id="scanFile" type="file" accept="image/*" style="display:none" />
+
+  <div id="importDataModal" class="modal" aria-hidden="true">
+    <div class="modal__backdrop" data-close="1"></div>
+    <div class="modal__panel modal__panel--import" role="dialog" aria-modal="true" aria-labelledby="importDataTitle">
+      <div class="modal__header">
+        <div>
+          <div id="importDataTitle" class="modal__title">Importér data</div>
+          <div class="modal__sub">Vælg om du vil indlæse en tagliste fra Access/Excel/CSV eller gendanne en JSON-backup.</div>
+        </div>
+        <button class="btn" id="btnImportDataClose" type="button">Luk</button>
+      </div>
+
+      <div class="modal__body">
+        <div class="importChoiceGrid">
+          <button id="btnImportTagList" class="importChoice" type="button">
+            <span class="importChoice__badge">Access / Excel / CSV</span>
+            <strong>Importér tagliste</strong>
+            <span>Bruges når eksisterende tagnumre flyttes ind fra Access, Excel eller en CSV-liste. Tags gemmes som I brug med import som kilde.</span>
+          </button>
+          <button id="btnImportJsonBackup" class="importChoice" type="button">
+            <span class="importChoice__badge">JSON backup</span>
+            <strong>Gendan backup</strong>
+            <span>Indlæser en lokal databasebackup. Accepterer både gamle rene post-lister og nye backup-filer med metadata.</span>
+          </button>
+        </div>
+        <div class="modal__note">Kun admin kan importere data. Tag altid en Backup JSON før større import.</div>
+      </div>
+    </div>
+  </div>
 
   <div id="loginModal" class="modal" aria-hidden="true">
     <div class="modal__backdrop" data-close="1"></div>

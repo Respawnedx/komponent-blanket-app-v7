@@ -578,6 +578,10 @@ export default {
       const rec = await readJson(request);
       if (!rec || !rec.id) return jsonResponse({ error: "record.id required" }, origin, allowed, 400);
 
+      const submittedBaseUpdatedAt = String(rec._baseUpdatedAt || rec.baseUpdatedAt || "").trim();
+      delete rec._baseUpdatedAt;
+      delete rec.baseUpdatedAt;
+
       // Server-authoritative updated fields
       const ts = nowIso();
       rec.editedBy = user.initials;
@@ -595,9 +599,25 @@ export default {
       const selectedCount = Array.isArray(rec.selectedCodes) ? rec.selectedCodes.length : 0;
 
       // Determine created_at/by (if new)
-      const existing = await env.DB.prepare("SELECT created_at, created_by, payload FROM records WHERE id=?")
+      const existing = await env.DB.prepare("SELECT created_at, created_by, updated_at, updated_by, payload FROM records WHERE id=?")
         .bind(String(rec.id))
         .first();
+
+      if (existing && submittedBaseUpdatedAt && existing.updated_at && existing.updated_at !== submittedBaseUpdatedAt) {
+        let currentRecord = null;
+        try {
+          currentRecord = existing.payload ? JSON.parse(existing.payload) : null;
+        } catch {
+          currentRecord = null;
+        }
+        return jsonResponse({
+          error: "Record was changed by another user. Refresh before saving.",
+          conflict: true,
+          currentUpdatedAt: existing.updated_at,
+          currentUpdatedBy: existing.updated_by || null,
+          record: currentRecord,
+        }, origin, allowed, 409);
+      }
 
       const created_at = existing?.created_at || ts;
       const created_by = existing?.created_by || user.initials;
