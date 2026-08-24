@@ -3782,7 +3782,7 @@ async function exportExcelFromSelectedRecords(){
 }
 
 
-el("btnPrint").addEventListener("click", () => window.print());
+el("btnPrint")?.addEventListener("click", () => window.print());
 
 el("btnExport").addEventListener("click", async () => {
   if(!requireAdmin("Kun admin kan eksportere JSON backup.")) return;
@@ -3798,7 +3798,7 @@ el("btnExport").addEventListener("click", async () => {
   URL.revokeObjectURL(a.href);
 });
 
-el("btnExportExcel").addEventListener("click", exportExcelFromCurrent);
+el("btnExportExcel")?.addEventListener("click", exportExcelFromCurrent);
 
 if(btnExportExcelSelected){
   btnExportExcelSelected.addEventListener("click", exportExcelFromSelectedRecords);
