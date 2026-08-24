@@ -31,10 +31,10 @@
         <span class="topbar__groupLabel">Post</span>
         <button id="btnNew" class="btn">Ny post</button>
         <button id="btnSave" class="btn btn--primary">Gem ændringer</button>
-        <button id="btnLoad" class="btn">Opdater data</button>
       </div>
       <div class="topbar__group" id="topbarDataGroup">
         <span class="topbar__groupLabel">Data</span>
+        <button id="btnLoad" class="btn">Opdater data</button>
         <button id="btnOCR" class="btn">Scan papir</button>
         <button id="btnPrint" class="btn">Print / PDF</button>
         <button id="btnImport" class="btn">Importér data</button>
@@ -128,6 +128,7 @@
 
     <section class="paperWrap">
       <div class="paperRow">
+        <div class="workColumn">
         <div class="paper" id="paper">
         <div class="headerFields">
           <div class="fieldRow">
@@ -249,6 +250,74 @@
 
         </div>
 
+        <div class="statusbar">
+          <div class="statusbar__left">
+            <div class="legend">
+              <span class="legend__item"><span class="swatch swatch--blue"></span>I brug</span>
+              <span class="legend__item"><span class="swatch swatch--reserved"></span>Projekt</span>
+              <span class="legend__item"><span class="swatch swatch--red"></span>Frigivet</span>
+              <span class="legend__item"><span class="swatch swatch--scan"></span>Scan/import</span>
+            </div>
+
+            <div class="controlBox" aria-label="Valg (markér/serie/PID/vis)">
+            <div class="toolbar">
+              <div class="toolgroup" id="markToolgroup">
+                <span class="toolLabel">Status:</span>
+                <div class="seg" id="markSeg">
+                  <button class="segBtn segBtn--active" data-mark="blue" type="button">I brug</button>
+                  <button class="segBtn" data-mark="reserved" type="button">Projekt</button>
+                  <button class="segBtn" data-mark="red" type="button">Frigivet</button>
+                </div>
+              </div>
+
+              <div class="toolgroup" id="pidToolgroup" style="display:none">
+                <span class="toolLabel">PID:</span>
+                <div class="seg" id="pidSeg" aria-label="PID valg"></div>
+              </div>
+
+              <div class="toolgroup" id="filterToolgroup">
+                <span class="toolLabel">Vis:</span>
+                <div class="seg" id="filterSeg">
+                  <button class="segBtn segBtn--active" data-filter="all" type="button">Alle</button>
+                  <button class="segBtn" data-filter="blue" type="button">I brug</button>
+                  <button class="segBtn" data-filter="reserved" type="button">Projekt</button>
+                  <button class="segBtn" data-filter="red" type="button">Frigivet</button>
+                  <button class="segBtn" data-filter="scan" type="button">Scan</button>
+                </div>
+              </div>
+            </div>
+            </div>
+
+            <div class="statusbar__overview">
+              <div class="availBox">
+                <div class="muted availTitle">Ledige numre (denne serie): <span id="availCount">—</span></div>
+                <div id="availableCodes" class="availPills" aria-label="Ledige numre">—</div>
+
+                <div class="matrixBox" aria-label="Ledige matrix-rækker">
+                  <div class="muted suffixTitle">Bedste ledige suffix-rækker på tværs af serier</div>
+                  <div id="matrixCandidates" class="matrixCandidates" aria-label="Ledige suffix-rækker">—</div>
+                </div>
+
+                <div class="suffixBox" aria-label="Overblik på tværs af serier">
+                  <div class="muted suffixTitle">Tjek suffix (01–99) i hele serien</div>
+                  <div class="suffixRow">
+                    <input id="suffixInput" class="suffixInput" inputmode="numeric" maxlength="2" placeholder="06" aria-label="Suffix" />
+                    <div id="suffixSeries" class="suffixSeries" aria-label="Serie-overblik">—</div>
+                  </div>
+                  <div class="muted suffixLegend">Grøn = ledig · Orange = projekt · Grå = optaget · Farvet prik = valgt i denne post</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="statusbar__right">
+            <div class="selectedBox" aria-label="Valgte felter">
+              <div id="statusLeft" class="muted">Valgte felter: <span id="selectedCodes">—</span></div>
+            </div>
+          </div>
+        </div>
+        </div>
+
         <aside class="revisionsDock is-compact" aria-label="Revisionslog">
           <div class="revisionsDock__header">
             <div>
@@ -270,74 +339,6 @@
 
           <div class="revisionsDock__hint muted">Tip: Ved <strong>Gem</strong> bliver du bedt om en kort beskrivelse (fx projektnr.).</div>
         </aside>
-      </div>
-
-      <div class="statusbar">
-        <div class="statusbar__left">
-          <div class="legend">
-            <span class="legend__item"><span class="swatch swatch--blue"></span>I brug</span>
-            <span class="legend__item"><span class="swatch swatch--reserved"></span>Projekt</span>
-            <span class="legend__item"><span class="swatch swatch--red"></span>Frigivet</span>
-            <span class="legend__item"><span class="swatch swatch--scan"></span>Scan/import</span>
-          </div>
-
-          <div class="controlBox" aria-label="Valg (markér/serie/PID/vis)">
-          <div class="toolbar">
-            <div class="toolgroup" id="markToolgroup">
-              <span class="toolLabel">Status:</span>
-              <div class="seg" id="markSeg">
-                <button class="segBtn segBtn--active" data-mark="blue" type="button">I brug</button>
-                <button class="segBtn" data-mark="reserved" type="button">Projekt</button>
-                <button class="segBtn" data-mark="red" type="button">Frigivet</button>
-              </div>
-            </div>
-
-            <div class="toolgroup" id="pidToolgroup" style="display:none">
-              <span class="toolLabel">PID:</span>
-              <div class="seg" id="pidSeg" aria-label="PID valg"></div>
-            </div>
-
-            <div class="toolgroup" id="filterToolgroup">
-              <span class="toolLabel">Vis:</span>
-              <div class="seg" id="filterSeg">
-                <button class="segBtn segBtn--active" data-filter="all" type="button">Alle</button>
-                <button class="segBtn" data-filter="blue" type="button">I brug</button>
-                <button class="segBtn" data-filter="reserved" type="button">Projekt</button>
-                <button class="segBtn" data-filter="red" type="button">Frigivet</button>
-                <button class="segBtn" data-filter="scan" type="button">Scan</button>
-              </div>
-            </div>
-          </div>
-          </div>
-
-          <!-- Overblik placeres lige under Vis: for bedre flow i UI -->
-          <div class="statusbar__overview">
-            <div class="availBox">
-              <div class="muted availTitle">Ledige numre (denne serie): <span id="availCount">—</span></div>
-              <div id="availableCodes" class="availPills" aria-label="Ledige numre">—</div>
-
-              <div class="matrixBox" aria-label="Ledige matrix-rækker">
-                <div class="muted suffixTitle">Bedste ledige suffix-rækker på tværs af serier</div>
-                <div id="matrixCandidates" class="matrixCandidates" aria-label="Ledige suffix-rækker">—</div>
-              </div>
-
-              <div class="suffixBox" aria-label="Overblik på tværs af serier">
-                <div class="muted suffixTitle">Tjek suffix (01–99) i hele serien</div>
-                <div class="suffixRow">
-                  <input id="suffixInput" class="suffixInput" inputmode="numeric" maxlength="2" placeholder="06" aria-label="Suffix" />
-                  <div id="suffixSeries" class="suffixSeries" aria-label="Serie-overblik">—</div>
-                </div>
-                <div class="muted suffixLegend">Grøn = ledig · Orange = projekt · Grå = optaget · Farvet prik = valgt i denne post</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="statusbar__right">
-          <div class="selectedBox" aria-label="Valgte felter">
-            <div id="statusLeft" class="muted">Valgte felter: <span id="selectedCodes">—</span></div>
-          </div>
-        </div>
       </div>
     </section>
   </main>

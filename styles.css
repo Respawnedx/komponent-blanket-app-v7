@@ -576,6 +576,23 @@ body.is-authenticated .authGate{
   justify-content:center;
   gap:16px;
   width:100%;
+  max-width:100%;
+  min-width:0;
+}
+
+@media (min-width: 1920px){
+  .paperRow{
+    justify-content:flex-start;
+    padding-left:clamp(48px, 4vw, 96px);
+  }
+}
+
+.workColumn{
+  width:860px;
+  flex:0 0 860px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
   min-width:0;
 }
 
@@ -949,7 +966,7 @@ body.is-authenticated .authGate{
 
 /* --- Statusbar --- */
 .statusbar{
-  width:860px;
+  width:100%;
   display:flex;
   justify-content:space-between;
   gap:10px;
@@ -1355,6 +1372,10 @@ html:not([data-series="0"]) .grid .item{
     display:contents;
   }
 
+  .workColumn{
+    order:1;
+  }
+
   .paper{
     order:1;
   }
@@ -1387,6 +1408,11 @@ html:not([data-series="0"]) .grid .item{
   .paperWrap{
     max-width:none;
     align-items:center;
+  }
+
+  .workColumn{
+    width:min(860px, calc(100vw - 28px));
+    flex:0 1 auto;
   }
 
   .paperRow{
