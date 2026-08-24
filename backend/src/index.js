@@ -10,7 +10,7 @@ function nowIso() {
 function normalizeRole(role) {
   const raw = String(role || "user").trim().toLowerCase().replace(/[\s-]+/g, "_");
   if (raw === "admin") return "admin";
-  if (["allocator", "semi_admin", "semiadmin", "editor", "manager"].includes(raw)) return "allocator";
+  if (["allocator", "planner", "semi_admin", "semiadmin", "editor", "manager"].includes(raw)) return "allocator";
   return "user";
 }
 
@@ -21,6 +21,62 @@ function canWriteRecords(user) {
 
 function canManageUsers(user) {
   return normalizeRole(user?.role) === "admin";
+}
+
+function isPlannerOnly(user) {
+  return normalizeRole(user?.role) === "allocator";
+}
+
+function normalizeLogin(value) {
+  const raw = String(value || "").trim();
+  if (raw.includes("@")) return raw.toLowerCase();
+  return raw.toUpperCase();
+}
+
+function normalizeEmail(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : "";
+}
+
+function normalizeTagStatus(mark) {
+  const raw = String(mark || "blue").trim().toLowerCase();
+  if (["reserved", "project", "temporary"].includes(raw)) return "reserved";
+  if (["red", "free", "removed"].includes(raw)) return "red";
+  return "blue";
+}
+
+function getRecordStatus(rec, code) {
+  const meta = rec?.codeMeta && typeof rec.codeMeta === "object" ? rec.codeMeta : {};
+  return normalizeTagStatus(meta?.[code]?.mark || "blue");
+}
+
+function plannerMutationError(prevRec, rec) {
+  if (!prevRec) return "Planner cannot create records";
+
+  const lockedFields = ["hovedkomponentnr", "beskrivelse", "anlaeg", "pid", "signatur1", "signatur2"];
+  for (const key of lockedFields) {
+    if (String(prevRec?.[key] || "") !== String(rec?.[key] || "")) {
+      return `Planner cannot change field: ${key}`;
+    }
+  }
+
+  const oldSet = new Set((Array.isArray(prevRec.selectedCodes) ? prevRec.selectedCodes : []).map(String));
+  const newSet = new Set((Array.isArray(rec.selectedCodes) ? rec.selectedCodes : []).map(String));
+  const all = new Set([...oldSet, ...newSet]);
+
+  for (const code of all) {
+    const oldHas = oldSet.has(code);
+    const newHas = newSet.has(code);
+    const oldStatus = oldHas ? getRecordStatus(prevRec, code) : null;
+    const newStatus = newHas ? getRecordStatus(rec, code) : null;
+
+    if (!oldHas && newHas && newStatus !== "reserved") return `Planner can only add project reservations (${code})`;
+    if (oldHas && !newHas && oldStatus !== "reserved") return `Planner can only remove project reservations (${code})`;
+    if (oldHas && newHas && oldStatus !== newStatus) return `Planner cannot change status (${code})`;
+  }
+
+  return "";
 }
 
 function parseMainNumber(raw) {
@@ -221,11 +277,11 @@ async function requireAuth(env, request) {
   if (!tok) return null;
 
   const row = await env.DB.prepare(
-    "SELECT initials, role, disabled FROM users WHERE initials=?"
+    "SELECT initials, email, role, disabled FROM users WHERE initials=?"
   ).bind(String(tok.initials)).first();
 
   if (!row || row.disabled) return null;
-  return { initials: row.initials, role: normalizeRole(row.role) };
+  return { initials: row.initials, email: row.email || "", role: normalizeRole(row.role) };
 }
 
 async function writeAudit(env, entry) {
@@ -266,15 +322,19 @@ export default {
     // --- Auth ---
     if (url.pathname === "/auth/login" && request.method === "POST") {
       const body = await readJson(request);
-      const initials = String(body?.initials || "").trim().toUpperCase();
+      const login = normalizeLogin(body?.login || body?.initials || body?.email || "");
       const pin = String(body?.pin || "").trim();
-      if (!initials || !pin) {
-        return jsonResponse({ error: "initials+pin required" }, origin, allowed, 400);
+      if (!login || !pin) {
+        return jsonResponse({ error: "login+pin required" }, origin, allowed, 400);
       }
 
-      const row = await env.DB.prepare(
-        "SELECT initials, role, pin_salt, pin_hash, disabled FROM users WHERE initials=?"
-      ).bind(initials).first();
+      const row = login.includes("@")
+        ? await env.DB.prepare(
+          "SELECT initials, email, role, pin_salt, pin_hash, disabled FROM users WHERE lower(email)=lower(?)"
+        ).bind(login).first()
+        : await env.DB.prepare(
+          "SELECT initials, email, role, pin_salt, pin_hash, disabled FROM users WHERE initials=?"
+        ).bind(login).first();
 
       if (!row || row.disabled) {
         return jsonResponse({ error: "Unknown user" }, origin, allowed, 401);
@@ -298,13 +358,13 @@ export default {
 
       const token = await signToken(env, payload);
       await writeAudit(env, { initials: row.initials, action: "LOGIN" });
-      return jsonResponse({ token, initials: row.initials, role }, origin, allowed);
+      return jsonResponse({ token, initials: row.initials, email: row.email || "", role }, origin, allowed);
     }
 
     if (url.pathname === "/auth/me" && request.method === "GET") {
       const user = await requireAuth(env, request);
       if (!user) return jsonResponse({ error: "Unauthorized" }, origin, allowed, 401);
-      return jsonResponse({ initials: user.initials, role: user.role }, origin, allowed);
+      return jsonResponse({ initials: user.initials, email: user.email || "", role: user.role }, origin, allowed);
     }
 
     // --- Admin: users ---
@@ -313,7 +373,7 @@ export default {
       if (!user || !canManageUsers(user)) return jsonResponse({ error: "Forbidden" }, origin, allowed, 403);
 
       const { results } = await env.DB.prepare(
-        "SELECT initials, role, disabled, created_at, created_by FROM users ORDER BY initials"
+        "SELECT initials, email, role, disabled, created_at, created_by FROM users ORDER BY initials"
       ).all();
       return jsonResponse({ users: results }, origin, allowed);
     }
@@ -324,25 +384,27 @@ export default {
 
       const body = await readJson(request);
       const initials = String(body?.initials || "").trim().toUpperCase();
+      const email = normalizeEmail(body?.email || "");
       const pin = String(body?.pin || "").trim();
       const role = normalizeRole(body?.role || "user");
 
       if (!initials || !pin) return jsonResponse({ error: "initials+pin required" }, origin, allowed, 400);
       if (!/^\d{4,8}$/.test(pin)) return jsonResponse({ error: "PIN must be 4-8 digits" }, origin, allowed, 400);
+      if (body?.email && !email) return jsonResponse({ error: "Invalid email" }, origin, allowed, 400);
 
       const salt = randomHex(16);
       const hash = await pbkdf2Hash(pin, salt);
       const ts = nowIso();
 
       await env.DB.prepare(
-        "INSERT INTO users(initials, role, pin_salt, pin_hash, disabled, created_at, created_by) VALUES(?,?,?,?,0,?,?) " +
-        "ON CONFLICT(initials) DO UPDATE SET role=excluded.role, pin_salt=excluded.pin_salt, pin_hash=excluded.pin_hash, disabled=0"
+        "INSERT INTO users(initials, email, role, pin_salt, pin_hash, disabled, created_at, created_by) VALUES(?,?,?,?,?,0,?,?) " +
+        "ON CONFLICT(initials) DO UPDATE SET email=excluded.email, role=excluded.role, pin_salt=excluded.pin_salt, pin_hash=excluded.pin_hash, disabled=0"
       )
-        .bind(initials, role, salt, hash, ts, user.initials)
+        .bind(initials, email || null, role, salt, hash, ts, user.initials)
         .run();
 
-      await writeAudit(env, { initials: user.initials, action: "ADMIN_CREATE_USER", field: initials, value: role });
-      return jsonResponse({ ok: true, initials, role }, origin, allowed);
+      await writeAudit(env, { initials: user.initials, action: "ADMIN_CREATE_USER", field: initials, value: role, meta: { email: email || null } });
+      return jsonResponse({ ok: true, initials, email, role }, origin, allowed);
     }
 
     // --- Records ---
@@ -390,12 +452,25 @@ export default {
       const selectedCount = Array.isArray(rec.selectedCodes) ? rec.selectedCodes.length : 0;
 
       // Determine created_at/by (if new)
-      const existing = await env.DB.prepare("SELECT created_at, created_by FROM records WHERE id=?")
+      const existing = await env.DB.prepare("SELECT created_at, created_by, payload FROM records WHERE id=?")
         .bind(String(rec.id))
         .first();
 
       const created_at = existing?.created_at || ts;
       const created_by = existing?.created_by || user.initials;
+
+      if (isPlannerOnly(user)) {
+        let prevRec = null;
+        if (existing?.payload) {
+          try {
+            prevRec = JSON.parse(existing.payload);
+          } catch {
+            prevRec = null;
+          }
+        }
+        const plannerError = plannerMutationError(prevRec, rec);
+        if (plannerError) return jsonResponse({ error: plannerError }, origin, allowed, 403);
+      }
 
       await env.DB.prepare(
         "INSERT INTO records(id, hovedkomponentnr, beskrivelse, anlaeg, pid, signatur1, signatur2, selected_count, payload, created_at, created_by, updated_at, updated_by) " +
@@ -448,7 +523,7 @@ export default {
     if (url.pathname.startsWith("/records/") && request.method === "DELETE") {
       const user = await requireAuth(env, request);
       if (!user) return jsonResponse({ error: "Unauthorized" }, origin, allowed, 401);
-      if (!canWriteRecords(user)) return jsonResponse({ error: "Semi-admin or admin access required" }, origin, allowed, 403);
+      if (!canManageUsers(user)) return jsonResponse({ error: "Admin access required" }, origin, allowed, 403);
 
       const id = decodeURIComponent(url.pathname.slice("/records/".length));
       const row = await env.DB.prepare("SELECT hovedkomponentnr FROM records WHERE id=?").bind(id).first();

@@ -7,6 +7,7 @@
 // No backend required.
 
 const STORAGE_KEY = "componentFormRecords_v1";
+const DRAFT_KEY = "componentFormDraft_v1";
 
 
 const el = (id) => document.getElementById(id);
@@ -483,7 +484,7 @@ function setFilterMode(filter){
 function rebuildGrids(){
   document.querySelectorAll(".grid").forEach(buildGrid);
   // Ensure newly built checkboxes follow the current access level.
-  setEditingEnabled(canAllocateNumbers());
+  setEditingEnabled();
   updateSelectedCodes();
 }
 
@@ -518,14 +519,14 @@ const USER_KEY = "componentFormUser_v1"; // legacy key for backward compatibilit
 function normalizeRole(role){
   const raw = String(role || ROLE_USER).trim().toLowerCase().replace(/[\s-]+/g, "_");
   if(raw === ROLE_ADMIN) return ROLE_ADMIN;
-  if(["allocator", "semi_admin", "semiadmin", "editor", "manager"].includes(raw)) return ROLE_ALLOCATOR;
+  if(["allocator", "planner", "semi_admin", "semiadmin", "editor", "manager"].includes(raw)) return ROLE_ALLOCATOR;
   return ROLE_USER;
 }
 
 function roleLabel(role){
   const r = normalizeRole(role);
   if(r === ROLE_ADMIN) return "admin";
-  if(r === ROLE_ALLOCATOR) return "semi-admin";
+  if(r === ROLE_ALLOCATOR) return "planner";
   return "visning";
 }
 
@@ -534,8 +535,39 @@ function canAllocateNumbers(user = getCurrentUser()){
   return role === ROLE_ADMIN || role === ROLE_ALLOCATOR;
 }
 
+function isPlannerOnly(user = getCurrentUser()){
+  return normalizeRole(user?.role) === ROLE_ALLOCATOR;
+}
+
 function canManageUsers(user = getCurrentUser()){
   return normalizeRole(user?.role) === ROLE_ADMIN;
+}
+
+function canCreateRecords(user = getCurrentUser()){
+  return canManageUsers(user);
+}
+
+function canImportData(user = getCurrentUser()){
+  return canManageUsers(user);
+}
+
+function canScanPaper(user = getCurrentUser()){
+  return canManageUsers(user);
+}
+
+function canExportBackup(user = getCurrentUser()){
+  return canManageUsers(user);
+}
+
+function canSaveRecords(user = getCurrentUser()){
+  const role = normalizeRole(user?.role);
+  return role === ROLE_ADMIN || role === ROLE_ALLOCATOR;
+}
+
+function canUseStatus(mark, user = getCurrentUser()){
+  const status = normalizeTagStatus(mark);
+  if(canManageUsers(user)) return true;
+  return isPlannerOnly(user) && status === TAG_STATUS.RESERVED;
 }
 
 function getAuth(){
@@ -594,11 +626,17 @@ async function apiFetch(path, opts = {}){
   return payload;
 }
 
-async function cloudLogin(initials, pin){
+function normalizeLoginInput(value){
+  const raw = String(value || "").trim();
+  if(raw.includes("@")) return raw.toLowerCase();
+  return raw.toUpperCase();
+}
+
+async function cloudLogin(login, pin){
   return apiFetch("/auth/login", {
     method: "POST",
     noAuth: true,
-    body: JSON.stringify({ initials, pin }),
+    body: JSON.stringify({ login, initials: login, pin }),
   });
 }
 
@@ -606,10 +644,10 @@ async function cloudMe(){
   return apiFetch("/auth/me", { method: "GET" });
 }
 
-async function cloudCreateUser(initials, pin, role="user"){
+async function cloudCreateUser(initials, pin, role="user", email=""){
   return apiFetch("/admin/users", {
     method: "POST",
-    body: JSON.stringify({ initials, pin, role: normalizeRole(role) }),
+    body: JSON.stringify({ initials, pin, role: normalizeRole(role), email }),
   });
 }
 
@@ -621,10 +659,18 @@ function requireLogin(reason = "Du skal være logget ind for at kunne redigere."
   return null;
 }
 
-function requireAllocator(reason = "Du skal have semi-admin eller admin adgang for at kunne udtage/redigere numre."){
+function requireAllocator(reason = "Du skal have planner eller admin adgang for at kunne reservere/gemme numre."){
   const user = requireLogin(reason);
   if(!user) return null;
-  if(canAllocateNumbers(user)) return user;
+  if(canSaveRecords(user)) return user;
+  alert(reason);
+  return null;
+}
+
+function requireAdmin(reason = "Du skal have admin adgang for at bruge denne funktion."){
+  const user = requireLogin(reason);
+  if(!user) return null;
+  if(canManageUsers(user)) return user;
   alert(reason);
   return null;
 }
@@ -657,7 +703,7 @@ function updateUserBadge(){
     badge.textContent = `Ikke logget ind`;
     badge.style.color = "var(--muted)";
     if(loginBtn) loginBtn.textContent = "Login";
-    setEditingEnabled(false);
+    setEditingEnabled();
     updateAdminUi();
     return;
   }
@@ -665,7 +711,7 @@ function updateUserBadge(){
   badge.textContent = `${user.initials} · ${roleLabel(user.role)}`;
   badge.style.color = "var(--accent-strong)";
   if(loginBtn) loginBtn.textContent = "Log ud";
-  setEditingEnabled(canAllocateNumbers(user));
+  setEditingEnabled();
   updateAdminUi();
 }
 
@@ -677,33 +723,53 @@ function updateAdminUi(){
   btn.style.display = show ? "inline-flex" : "none";
 }
 
-function setEditingEnabled(enabled){
+function setButtonAccess(id, visible, enabled = visible){
+  const node = document.getElementById(id);
+  if(!node) return;
+  node.hidden = !visible;
+  node.disabled = !enabled;
+}
+
+function setEditingEnabled(){
+  const user = getCurrentUser();
+  const canMark = !!user && canAllocateNumbers(user);
+  const admin = !!user && canManageUsers(user);
+  const planner = !!user && isPlannerOnly(user);
+
   // Checkboxes
-  getAllCheckboxes().forEach(cb => cb.disabled = !enabled);
+  getAllCheckboxes().forEach(cb => cb.disabled = !canMark);
 
-  // Buttons that mutate checkmarks / data
-  const btnOCR = document.getElementById("btnOCR");
-  if(btnOCR) btnOCR.disabled = !enabled;
+  setButtonAccess("btnSave", !!user && canSaveRecords(user), !!user && canSaveRecords(user));
+  setButtonAccess("btnNew", admin, admin);
+  setButtonAccess("btnOCR", admin && canScanPaper(user), admin && canScanPaper(user));
+  setButtonAccess("btnImport", admin && canImportData(user), admin && canImportData(user));
+  setButtonAccess("btnExport", admin && canExportBackup(user), admin && canExportBackup(user));
+  setButtonAccess("btnExportExcel", !!user, !!user);
+  setButtonAccess("btnPrint", !!user, !!user);
+  setButtonAccess("btnLoad", !!user, !!user);
 
-  const btnSave = document.getElementById("btnSave");
-  if(btnSave) btnSave.disabled = !enabled;
-
-  const btnNew = document.getElementById("btnNew");
-  if(btnNew) btnNew.disabled = !enabled;
-
-  const btnImport = document.getElementById("btnImport");
-  if(btnImport) btnImport.disabled = !enabled;
-
-  const btnImportExcelTags = document.getElementById("btnImportExcelTags");
-  if(btnImportExcelTags) btnImportExcelTags.disabled = !enabled;
+  const saveBtn = document.getElementById("btnSave");
+  if(saveBtn) saveBtn.textContent = planner ? "Gem projekt" : "Gem ændringer";
 
   [fields.desc, fields.plant, fields.pid, fields.sign1, fields.sign2].forEach(field => {
-    if(field) field.readOnly = !enabled;
+    if(field) field.readOnly = !admin;
+  });
+  if(fields.main) fields.main.readOnly = !admin;
+
+  document.querySelectorAll("#markSeg .segBtn").forEach(btn => {
+    const status = btn.dataset.mark;
+    const allowed = !!user && canUseStatus(status, user);
+    btn.disabled = !allowed;
+    if(planner && status === TAG_STATUS.RESERVED){
+      btn.classList.add("segBtn--active");
+    }
   });
 
-  document.querySelectorAll("#markSeg .segBtn, #pidSeg .segBtn").forEach(btn => {
-    btn.disabled = !enabled;
+  document.querySelectorAll("#pidSeg .segBtn").forEach(btn => {
+    btn.disabled = !canMark;
   });
+
+  if(planner) setMarkMode(TAG_STATUS.RESERVED);
 }
 
 
@@ -767,8 +833,8 @@ function buildGrid(gridEl){
         requireLogin("Du skal være logget ind for at kunne sætte krydser.");
         return;
       }
-      if(!canAllocateNumbers(user)){
-        alert("Du skal have semi-admin eller admin adgang for at kunne udtage/redigere numre.");
+      if(!canManageUsers(user)){
+        alert("Kun admin kan sætte I brug/frigivet direkte. Planner kan kun bruge Projekt-status.");
         return;
       }
 
@@ -794,6 +860,7 @@ function buildGrid(gridEl){
       };
 
       updateSelectedCodes();
+      saveDraft("status-change");
 
       const mainRaw = (fields.main.value || "").trim();
       logAudit({
@@ -815,11 +882,28 @@ function buildGrid(gridEl){
       }
       if(!canAllocateNumbers(user)){
         cb.checked = !cb.checked;
-        alert("Du skal have semi-admin eller admin adgang for at kunne udtage/redigere numre.");
+        alert("Du skal have planner eller admin adgang for at kunne reservere/gemme numre.");
         return;
       }
 
       const now = new Date().toISOString();
+      const previousStatus = codeSource[codeKey] ? getMarkForCode(codeKey) : null;
+
+      if(isPlannerOnly(user)){
+        if(!activeId){
+          cb.checked = !cb.checked;
+          alert("Planner kan kun reservere projektnumre på en eksisterende post. Åbn først en post fra søgningen.");
+          return;
+        }
+        if(previousStatus && previousStatus !== TAG_STATUS.RESERVED){
+          cb.checked = !cb.checked;
+          alert("Planner kan kun tilføje eller fjerne orange projektnumre. I brug/frigivet ændres af admin.");
+          return;
+        }
+        if(currentMark !== TAG_STATUS.RESERVED) setMarkMode(TAG_STATUS.RESERVED);
+      }
+
+      const markToApply = isPlannerOnly(user) ? TAG_STATUS.RESERVED : currentMark;
 
       if(cb.checked){
         codeSource[codeKey] = "manual";
@@ -827,13 +911,13 @@ function buildGrid(gridEl){
           by: user.initials,
           at: now,
           source: "manual",
-          mark: currentMark,
+          mark: markToApply,
           pid: getCurrentPidValue(),
           pidIdx: currentPidIdx,
           pidColor: (pidOptions.length > 1) ? (currentPidIdx % 4) : 0,
         };
-        changeBuffer.push({ at: now, by: user.initials, action: "CHECK", code: codeKey, source: "manual", mark: currentMark });
-      }else if(codeSource[codeKey] && getMarkForCode(codeKey) !== currentMark){
+        changeBuffer.push({ at: now, by: user.initials, action: "CHECK", code: codeKey, source: "manual", mark: markToApply });
+      }else if(codeSource[codeKey] && getMarkForCode(codeKey) !== markToApply){
         cb.checked = true;
         const prev = codeMeta[codeKey] || {};
         codeSource[codeKey] = prev.source === "scan" ? "scan" : "manual";
@@ -841,19 +925,20 @@ function buildGrid(gridEl){
           ...prev,
           by: user.initials,
           at: now,
-          mark: currentMark,
+          mark: markToApply,
           pid: prev.pid ?? getCurrentPidValue(),
           pidIdx: Number.isFinite(parseInt(prev.pidIdx,10)) ? parseInt(prev.pidIdx,10) : currentPidIdx,
           pidColor: prev.pidColor ?? ((pidOptions.length > 1) ? (currentPidIdx % 4) : 0),
         };
-        changeBuffer.push({ at: now, by: user.initials, action: "STATUS_CHANGE", code: codeKey, source: codeSource[codeKey], mark: currentMark });
+        changeBuffer.push({ at: now, by: user.initials, action: "STATUS_CHANGE", code: codeKey, source: codeSource[codeKey], mark: markToApply });
       }else{
         delete codeSource[codeKey];
         delete codeMeta[codeKey];
-        changeBuffer.push({ at: now, by: user.initials, action: "UNCHECK", code: codeKey, source: "manual" });
+        changeBuffer.push({ at: now, by: user.initials, action: "UNCHECK", code: codeKey, source: "manual", mark: previousStatus });
       }
 
       updateSelectedCodes();
+      saveDraft("status-change");
 
       const mainRaw = (fields.main.value || "").trim();
       logAudit({
@@ -862,7 +947,7 @@ function buildGrid(gridEl){
         hovednr: parseMainNumber(mainRaw) || null,
         opsaetning: parseInt(codeKey, 10),
         tag: buildTag(mainRaw, codeKey) || null,
-        meta: { source: "manual", mark: cb.checked ? currentMark : null, pid: cb.checked ? getCurrentPidValue() : null }
+        meta: { source: "manual", mark: cb.checked ? markToApply : previousStatus, pid: cb.checked ? getCurrentPidValue() : null }
       });
     });
 
@@ -1177,12 +1262,20 @@ function applyCheckChange(codeKey, checked, markOverride=null){
     return;
   }
   if(!canAllocateNumbers(user)){
-    alert("Du skal have semi-admin eller admin adgang for at kunne udtage/redigere numre.");
+    alert("Du skal have planner eller admin adgang for at kunne reservere/gemme numre.");
     return;
+  }
+  if(isPlannerOnly(user)){
+    const previousStatus = codeSource[codeKey] ? getMarkForCode(codeKey) : null;
+    const requestedStatus = normalizeTagStatus(markOverride || currentMark);
+    if(!activeId || (previousStatus && previousStatus !== TAG_STATUS.RESERVED) || requestedStatus !== TAG_STATUS.RESERVED){
+      alert("Planner kan kun tilføje eller fjerne orange projektnumre på en eksisterende post.");
+      return;
+    }
   }
 
   const now = new Date().toISOString();
-  const mark = markOverride || currentMark;
+  const mark = isPlannerOnly(user) ? TAG_STATUS.RESERVED : (markOverride || currentMark);
   if(checked){
     codeSource[codeKey] = "manual";
     codeMeta[codeKey] = {
@@ -1206,6 +1299,7 @@ function applyCheckChange(codeKey, checked, markOverride=null){
   if(cb) cb.checked = checked;
 
   updateSelectedCodes();
+  saveDraft("status-change");
 
   const mainRaw = (fields.main.value || "").trim();
   logAudit({
@@ -1223,6 +1317,7 @@ function clearForm(){
   activeId = null;
   changeBuffer = [];
   codeMeta = {};
+  codeSource = {};
   fields.main.value = "";
   fields.desc.value = "";
   fields.plant.value = "";
@@ -1233,6 +1328,7 @@ function clearForm(){
   setSelectedCodes([]);
   renderRevisions(null);
   renderRecordList();
+  clearDraft();
 }
 
 function getFormData(){
@@ -1474,6 +1570,113 @@ async function logAudit(entry){
   }
 }
 
+function readDraft(){
+  try{
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch{
+    return null;
+  }
+}
+
+function draftHasContent(draft){
+  const fieldsIn = draft?.fields || {};
+  const hasFields = Object.values(fieldsIn).some(v => String(v || "").trim());
+  const hasCodes = Object.keys(draft?.codeSource || {}).length > 0;
+  return !!(draft?.activeId || hasFields || hasCodes);
+}
+
+function saveDraft(reason = "edit"){
+  const user = getCurrentUser();
+  if(!user) return;
+
+  const draft = {
+    version: 1,
+    reason,
+    savedAt: new Date().toISOString(),
+    userInitials: user.initials,
+    role: normalizeRole(user.role),
+    activeId,
+    currentSeries,
+    currentFilter,
+    currentMark,
+    currentSuffix,
+    currentPidIdx,
+    fields: {
+      main: fields.main?.value || "",
+      desc: fields.desc?.value || "",
+      plant: fields.plant?.value || "",
+      pid: fields.pid?.value || "",
+      sign1: fields.sign1?.value || "",
+      sign2: fields.sign2?.value || "",
+    },
+    codeSource: { ...codeSource },
+    codeMeta: { ...codeMeta },
+    changeBuffer: Array.isArray(changeBuffer) ? [...changeBuffer] : [],
+  };
+
+  if(!draftHasContent(draft)){
+    localStorage.removeItem(DRAFT_KEY);
+    updateSyncBadge();
+    return;
+  }
+
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  updateSyncBadge("Kladde gemt lokalt");
+}
+
+function clearDraft(){
+  localStorage.removeItem(DRAFT_KEY);
+  updateSyncBadge();
+}
+
+function restoreDraft(draft){
+  if(!draft || !draftHasContent(draft)) return false;
+
+  activeId = draft.activeId || null;
+  changeBuffer = Array.isArray(draft.changeBuffer) ? [...draft.changeBuffer] : [];
+  codeSource = (draft.codeSource && typeof draft.codeSource === "object") ? { ...draft.codeSource } : {};
+  codeMeta = (draft.codeMeta && typeof draft.codeMeta === "object") ? { ...draft.codeMeta } : {};
+
+  const f = draft.fields || {};
+  fields.main.value = f.main || "";
+  fields.desc.value = f.desc || "";
+  fields.plant.value = f.plant || "";
+  fields.pid.value = f.pid || "";
+  fields.sign1.value = f.sign1 || "";
+  fields.sign2.value = f.sign2 || "";
+
+  currentPidIdx = Number.isFinite(parseInt(draft.currentPidIdx, 10)) ? parseInt(draft.currentPidIdx, 10) : 0;
+  refreshPidOptionsFromField();
+  setMarkMode(draft.currentMark || TAG_STATUS.ACTIVE);
+  setFilterMode(draft.currentFilter || "all");
+  setSeries(Number.isFinite(parseInt(draft.currentSeries, 10)) ? parseInt(draft.currentSeries, 10) : 0);
+  if(suffixInputEl && draft.currentSuffix) suffixInputEl.value = pad2(draft.currentSuffix);
+  updateSelectedCodes();
+
+  const rec = activeId ? loadRecords().find(r => r.id === activeId) : null;
+  renderRevisions(rec || null);
+  renderRecordList();
+  updateSyncBadge("Kladde gendannet");
+  return true;
+}
+
+function maybeOfferDraftRestore(){
+  const user = getCurrentUser();
+  if(!user) return;
+  const draft = readDraft();
+  if(!draftHasContent(draft)) return;
+  if(draft.userInitials && draft.userInitials !== user.initials) return;
+
+  const when = draft.savedAt ? new Date(draft.savedAt).toLocaleString("da-DK") : "";
+  const msg = `Der findes en ikke-gemt lokal kladde${when ? " fra " + when : ""}.\n\nVil du gendanne den?`;
+  if(confirm(msg)){
+    restoreDraft(draft);
+  }else{
+    clearDraft();
+  }
+}
+
 
 // ---------- List rendering ----------
 function matchesSearch(rec, q){
@@ -1584,7 +1787,7 @@ function renderRecordList(){
 
     actions.appendChild(btnUse);
 
-    if(canAllocateNumbers()){
+    if(canManageUsers()){
       const btnDel = document.createElement("button");
       btnDel.className = "btn";
       btnDel.textContent = "Slet";
@@ -1653,6 +1856,7 @@ function escapeHtml(s){
 // Import JSON (backup)
 const importFile = document.getElementById("importFile");
 document.getElementById("btnImport").addEventListener("click", () => {
+  if(!requireAdmin("Kun admin kan importere Access/Excel/JSON data.")) return;
   const choice = prompt(
     "Importér data\n\n1 = Access/Excel/CSV tagliste\n2 = JSON backup\n\nSkriv 1 eller 2:",
     "1"
@@ -1665,7 +1869,7 @@ document.getElementById("btnImport").addEventListener("click", () => {
 importFile.addEventListener("change", async () => {
   const file = importFile.files?.[0];
   if(!file) return;
-  const importUser = requireAllocator("Du skal have semi-admin eller admin adgang for at importere poster.");
+  const importUser = requireAdmin("Kun admin kan importere JSON backup.");
   if(!importUser){
     importFile.value = "";
     return;
@@ -1732,7 +1936,7 @@ function findRecordByMainKey(mainKey){
 async function importTagsFromExcel(file){
   if(!file) return;
 
-  const user = requireAllocator("Du skal have semi-admin eller admin adgang for at importere Excel (det opretter/ajourfører poster og logger initialer).");
+  const user = requireAdmin("Kun admin kan importere Excel (det opretter/ajourfører poster og logger initialer).");
   if(!user) return;
 
   if(typeof XLSX === "undefined"){
@@ -1957,7 +2161,7 @@ scanFile.addEventListener("change", async () => {
   const file = scanFile.files?.[0];
   if(!file) return;
 
-  const user = requireAllocator("Du skal have semi-admin eller admin adgang for at køre OCR (det ændrer krydser og logger initialer).");
+  const user = requireAdmin("Kun admin kan køre OCR/scan (det ændrer krydser og logger initialer).");
   if(!user){
     scanFile.value = "";
     return;
@@ -2033,6 +2237,7 @@ ctx.drawImage(cropped, 0, 0, cropped.width, cropped.height, dx, dy, dw, dh);
     }
 
     updateSelectedCodes();
+    saveDraft("scan-import");
 
     // Log scan apply
     const recExisting = activeId ? loadRecords().find(r => r.id === activeId) : null;
@@ -2185,12 +2390,14 @@ function detectCheckedCodesFromCanvas(canvas, paperEl){
 
 // ---------- Login modal wiring ----------
 const loginModal = document.getElementById("loginModal");
+const loginForm = document.getElementById("loginForm");
 const btnLogin = document.getElementById("btnLogin");
 const btnLoginClose = document.getElementById("btnLoginClose");
 const btnLoginSave = document.getElementById("btnLoginSave");
 const btnLogout = document.getElementById("btnLogout");
 const loginInitials = document.getElementById("loginInitials");
 const loginPin = document.getElementById("loginPin");
+const gateLoginForm = document.getElementById("gateLoginForm");
 const gateLoginInitials = document.getElementById("gateLoginInitials");
 const gateLoginPin = document.getElementById("gateLoginPin");
 const gateLoginError = document.getElementById("gateLoginError");
@@ -2213,6 +2420,7 @@ function closeLogin(){
 btnLogin.addEventListener("click", () => {
   const user = getCurrentUser();
   if(user && confirm(`Log ud som ${user.initials}?`)){
+    clearDraft();
     clearAuth();
     // For cloud-mode: tøm cache så listen er neutral indtil næste login
     if(USE_CLOUD){ recordsCache = []; renderRecordList(); }
@@ -2224,12 +2432,13 @@ btnLogin.addEventListener("click", () => {
 btnLoginClose.addEventListener("click", closeLogin);
 loginModal.querySelector(".modal__backdrop").addEventListener("click", closeLogin);
 
-async function performLogin(initials, pin, options = {}){
+async function performLogin(loginValue, pin, options = {}){
   const source = options.source || "modal";
   const showInlineError = source === "gate";
+  const login = normalizeLoginInput(loginValue);
 
-  if(!initials){
-    const msg = "Skriv initialer.";
+  if(!login){
+    const msg = "Skriv email eller initialer.";
     if(showInlineError) setGateError(msg);
     else alert(msg);
     return false;
@@ -2244,10 +2453,11 @@ async function performLogin(initials, pin, options = {}){
       return false;
     }
     try{
-      const data = await cloudLogin(initials, pin);
-      setAuth({ token: data.token, user: { initials: data.initials, role: data.role } });
+      const data = await cloudLogin(login, pin);
+      setAuth({ token: data.token, user: { initials: data.initials, role: data.role, email: data.email || "" } });
       closeLogin();
       await refreshRecords();
+      maybeOfferDraftRestore();
       return true;
     }catch(err){
       const msg = (err?.message ?? String(err));
@@ -2268,21 +2478,32 @@ async function performLogin(initials, pin, options = {}){
     }
   }else{
     // Lokal fallback: gem kun initialer (ingen rigtig sikkerhed)
-    localStorage.setItem(USER_KEY, JSON.stringify({ initials, role: "user" }));
-    setAuth({ token: null, user: { initials, role: ROLE_ALLOCATOR } });
+    localStorage.setItem(USER_KEY, JSON.stringify({ initials: login, role: "user" }));
+    setAuth({ token: null, user: { initials: login, role: ROLE_ALLOCATOR } });
     closeLogin();
     renderRecordList();
+    maybeOfferDraftRestore();
     return true;
   }
 }
 
-btnLoginSave.addEventListener("click", async () => {
-  const initials = (loginInitials.value || "").trim().toUpperCase();
+async function handleModalLoginSubmit(){
+  const initials = normalizeLoginInput(loginInitials.value || "");
   const pin = (loginPin?.value || "").trim();
   await performLogin(initials, pin, { source: "modal" });
-});
+}
+
+if(loginForm){
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await handleModalLoginSubmit();
+  });
+}else{
+  btnLoginSave?.addEventListener("click", handleModalLoginSubmit);
+}
 
 btnLogout.addEventListener("click", async () => {
+  clearDraft();
   clearAuth();
   closeLogin();
   if(USE_CLOUD){
@@ -2291,22 +2512,17 @@ btnLogout.addEventListener("click", async () => {
   }
 });
 
-if(btnGateLogin){
-  btnGateLogin.addEventListener("click", async () => {
-    const initials = (gateLoginInitials?.value || "").trim().toUpperCase();
+if(gateLoginForm){
+  gateLoginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const login = normalizeLoginInput(gateLoginInitials?.value || "");
     const pin = (gateLoginPin?.value || "").trim();
-    const ok = await performLogin(initials, pin, { source: "gate" });
+    const ok = await performLogin(login, pin, { source: "gate" });
     if(ok && gateLoginPin) gateLoginPin.value = "";
   });
 }
 
 [gateLoginInitials, gateLoginPin].forEach(input => {
-  input?.addEventListener("keydown", (e) => {
-    if(e.key === "Enter"){
-      e.preventDefault();
-      btnGateLogin?.click();
-    }
-  });
   input?.addEventListener("input", () => setGateError(""));
 });
 
@@ -2320,6 +2536,8 @@ const revDescEl = document.getElementById("revDesc");
 const revTbodyEl = document.getElementById("revTbody");
 const revLastSummaryEl = document.getElementById("revLastSummary");
 const revLastChangesEl = document.getElementById("revLastChanges");
+const revisionsDockEl = document.querySelector(".revisionsDock");
+const btnToggleRevisions = document.getElementById("btnToggleRevisions");
 
 let _revResolve = null;
 
@@ -2371,6 +2589,20 @@ revDescEl?.addEventListener("keydown", (e) => {
     _finishRev((revDescEl?.value || "").trim());
   }
 });
+
+function setRevisionsCompact(compact){
+  if(!revisionsDockEl || !btnToggleRevisions) return;
+  revisionsDockEl.classList.toggle("is-compact", !!compact);
+  btnToggleRevisions.textContent = compact ? "Vis log" : "Skjul";
+  btnToggleRevisions.setAttribute("aria-expanded", compact ? "false" : "true");
+  localStorage.setItem("componentFormRevisionsCompact_v1", compact ? "1" : "0");
+}
+
+if(btnToggleRevisions){
+  btnToggleRevisions.addEventListener("click", () => {
+    setRevisionsCompact(!revisionsDockEl?.classList.contains("is-compact"));
+  });
+}
 
 // ---------- Revisions rendering ----------
 function formatRevDate(iso){
@@ -2447,13 +2679,15 @@ if(btnAdminCreateUser){
     const initials = prompt("Initialer på ny bruger (fx AB):", "")?.trim().toUpperCase();
     if(!initials) return;
 
+    const email = prompt("Email til brugeren (valgfri, fx navn@arlafoods.com):", "")?.trim().toLowerCase() || "";
+
     const pin = prompt("PIN (4-8 cifre) til brugeren:", "")?.trim();
     if(!pin) return;
 
-    const role = normalizeRole(prompt("Rolle (user/semi-admin/admin):", "user") || "user");
+    const role = normalizeRole(prompt("Rolle (user/planner/admin):", "user") || "user");
 
     try{
-      await cloudCreateUser(initials, pin, role);
+      await cloudCreateUser(initials, pin, role, email);
       alert(`Bruger ${initials} oprettet/opdateret (${roleLabel(role)}).`);
     }catch(err){
       alert("Kunne ikke oprette bruger: " + (err?.message ?? err));
@@ -2493,14 +2727,20 @@ if(filterSeg){
 if(fields.pid){
   fields.pid.addEventListener("input", () => {
     refreshPidOptionsFromField();
+    saveDraft("field-change");
   });
 }
 
 if(fields.main){
   fields.main.addEventListener("input", () => {
     updateAvailabilityDisplay();
+    saveDraft("field-change");
   });
 }
+
+[fields.desc, fields.plant, fields.sign1, fields.sign2].forEach(field => {
+  field?.addEventListener("input", () => saveDraft("field-change"));
+});
 
 // Clickable availability pills (ledig/optaget)
 // (Oversigten over ledige numre er kun til overblik og er ikke klikbar)
@@ -2523,16 +2763,63 @@ if(suffixSeriesEl){
   });
 }
 
+function plannerSaveError(prevRec, rec){
+  if(!isPlannerOnly()) return "";
+  if(!prevRec) return "Planner kan kun reservere projektnumre på en eksisterende post.";
+
+  const lockedFields = [
+    ["hovedkomponentnr", "Hovedkomponentnr."],
+    ["beskrivelse", "Beskrivelse"],
+    ["anlaeg", "Anlæg"],
+    ["pid", "PID Tegningsnr."],
+    ["signatur1", "Signatur"],
+    ["signatur2", "Signatur"],
+  ];
+
+  for(const [key, label] of lockedFields){
+    if(String(prevRec?.[key] || "") !== String(rec?.[key] || "")){
+      return `Planner kan ikke ændre feltet "${label}". Åbn admin for stamdataændringer.`;
+    }
+  }
+
+  const oldSet = new Set((prevRec.selectedCodes || []).map(String));
+  const newSet = new Set((rec.selectedCodes || []).map(String));
+  const all = new Set([...oldSet, ...newSet]);
+
+  for(const code of all){
+    const oldHas = oldSet.has(code);
+    const newHas = newSet.has(code);
+    const oldStatus = oldHas ? getRecMark(prevRec, code) : null;
+    const newStatus = newHas ? getRecMark(rec, code) : null;
+
+    if(!oldHas && newHas && newStatus !== TAG_STATUS.RESERVED){
+      return `Planner kan kun tilføje orange projektnumre (${formatOpsaetning(code)} er ikke Projekt).`;
+    }
+    if(oldHas && !newHas && oldStatus !== TAG_STATUS.RESERVED){
+      return `Planner kan kun fjerne orange projektnumre (${formatOpsaetning(code)} er ${tagStatusLabel(oldStatus)}).`;
+    }
+    if(oldHas && newHas && oldStatus !== newStatus){
+      return `Planner kan ikke ændre status på ${formatOpsaetning(code)} fra ${tagStatusLabel(oldStatus)} til ${tagStatusLabel(newStatus)}.`;
+    }
+  }
+
+  return "";
+}
+
 
 // ---------- Buttons ----------
 el("btnNew").addEventListener("click", () => {
-  if(!requireAllocator("Du skal have semi-admin eller admin adgang for at oprette en ny post.")) return;
+  if(!requireAdmin("Kun admin kan oprette en ny post.")) return;
   clearForm();
 });
 
 el("btnSave").addEventListener("click", async () => {
-  const user = requireAllocator("Du skal have semi-admin eller admin adgang for at kunne gemme/udtage numre.");
+  const user = requireAllocator("Du skal have planner eller admin adgang for at kunne gemme projektændringer.");
   if(!user) return;
+  if(isPlannerOnly(user) && !activeId){
+    alert("Planner kan kun gemme orange projektnumre på en eksisterende post. Åbn først en post fra søgningen.");
+    return;
+  }
 
   const v = validateSingleMainNumber(fields.main.value);
   if(!v.ok){ alert(v.message); return; }
@@ -2595,6 +2882,11 @@ el("btnSave").addEventListener("click", async () => {
   const prevRec = activeId ? loadRecords().find(r => r.id === activeId) : null;
 
   const rec = getFormData();
+  const plannerError = plannerSaveError(prevRec, rec);
+  if(plannerError){
+    alert(plannerError);
+    return;
+  }
   const changes = computeTagChanges(prevRec, rec);
 
   if(!Array.isArray(rec.revisions)) rec.revisions = [];
@@ -2605,6 +2897,7 @@ el("btnSave").addEventListener("click", async () => {
     activeId = rec.id;
     renderRecordList();
     changeBuffer = [];
+    clearDraft();
 
     // Audit: gem-hændelse
     await logAudit({
@@ -3178,6 +3471,7 @@ async function exportExcelFromSelectedRecords(){
 el("btnPrint").addEventListener("click", () => window.print());
 
 el("btnExport").addEventListener("click", async () => {
+  if(!requireAdmin("Kun admin kan eksportere JSON backup.")) return;
   if(USE_CLOUD){
     try{ await refreshRecords(); }catch{}
   }
@@ -3213,20 +3507,21 @@ searchEl.addEventListener("input", renderRecordList);
   if(USE_CLOUD){
     if(btnSave) btnSave.textContent = "Gem ændringer";
     if(btnLoad) btnLoad.textContent = "Opdater data";
-    if(title) title.textContent = "Poster (cloud)";
+    if(title) title.textContent = "Søg";
     if(hint){
       hint.innerHTML = `
-        <div><strong>Cloud-mode:</strong> Poster gemmes i D1 (fælles for alle brugere).</div>
-        <div>Log ind for at søge/se poster. Semi-admin eller admin kan udtage numre.</div>
+        <div><strong>Søgning:</strong> Find hovednr., PID eller et fuldt tag.</div>
+        <div>VIEW kan se. PLAN kan reservere orange projektnumre. ADMIN kan vedligeholde data.</div>
       `;
     }
   }else{
     if(btnSave) btnSave.textContent = "Gem ændringer";
     if(btnLoad) btnLoad.textContent = "Opdater data";
-    if(title) title.textContent = "Poster (lokalt)";
+    if(title) title.textContent = "Søg";
   }
 
   updateUserBadge();
+  setRevisionsCompact(localStorage.getItem("componentFormRevisionsCompact_v1") !== "0");
   setMarkMode(currentMark);
   setFilterMode(currentFilter);
   setSeries(currentSeries);
@@ -3236,8 +3531,9 @@ searchEl.addEventListener("input", renderRecordList);
   if(USE_CLOUD && getCurrentUser()){
     try{
       const me = await cloudMe();
-      setAuth({ token: getToken(), user: { initials: me.initials, role: me.role } });
+      setAuth({ token: getToken(), user: { initials: me.initials, role: me.role, email: me.email || "" } });
       await refreshRecords();
+      maybeOfferDraftRestore();
     }catch(err){
       if(/Unauthorized|Forbidden|Unknown user/i.test(err?.message || "")){
         clearAuth();

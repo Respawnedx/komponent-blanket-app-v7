@@ -1,6 +1,6 @@
 # Komponent Blanket App
 
-A browser-based prototype for managing component setup numbers, preventing double numbering, reserving numbers for projects, saving revision history, exporting Excel/JSON files, printing filled forms, and optionally sharing records through a Cloudflare Workers + D1 backend.
+A browser-based prototype for managing component setup numbers, preventing double numbering, reserving numbers for projects, saving revision history, exporting Excel data, printing filled forms, and optionally sharing records through a Cloudflare Workers + D1 backend.
 
 The user interface is written in plain HTML, CSS, and JavaScript. It can run as a static site, or it can connect to the Worker API configured in `index.html`.
 
@@ -33,6 +33,7 @@ The user interface is written in plain HTML, CSS, and JavaScript. It can run as 
 - `codeMeta` stores metadata per selected code, including status, user initials, timestamp, PID, and source.
 - `selectedRecordIds` stores sidebar multi-selection for bulk Excel export and printing.
 - `changeBuffer` temporarily tracks unsaved checkbox and metadata changes before a revision is saved.
+- `componentFormDraft_v1` in `localStorage` stores an unsaved local draft so checkbox changes can be restored if the browser closes before the user saves a revision.
 
 On startup, `app.js` checks `window.COMPONENT_APP_API`.
 
@@ -63,16 +64,18 @@ The availability panel shows free numbers in the active series and suggests suff
 
 Saving a record collects the current form fields and selected setup codes into one JSON object. Before saving, the user is asked for a short revision description. The app compares the previous saved version with the new version and writes a readable revision summary showing added, removed, and changed tags.
 
+Checkbox changes also update a local browser draft immediately. This draft is intentionally not a cloud autosave: the official D1 record and revision log only change after the user presses Save and enters a revision description. This keeps the audit trail readable while still protecting against accidentally closing the page.
+
 ## Import, Export, and Print
 
 The app supports:
 
-- JSON import/export for backup and transfer.
 - Excel export for the active record.
 - Excel export for selected sidebar records.
 - Access/Excel/CSV tag import from `.xls`, `.xlsx`, or `.csv`.
 - Browser print/PDF for the active form or selected records.
 - OCR/image scan import for detecting marked checkboxes from a scanned form.
+- Admin-only JSON backup export/import for prototype transfer and troubleshooting.
 
 Excel/CSV support is loaded from the SheetJS CDN in `index.html`. For Microsoft Access migration, the intended prototype path is to export an Access table or query to Excel/CSV with one row per tag/allocation, then import that file into this app.
 
@@ -109,13 +112,13 @@ The frontend connects to Cloudflare by setting this value in `index.html`:
 </script>
 ```
 
-When this value is not empty, users must log in with initials and a PIN. Records are stored in D1 and shared across users.
+When this value is not empty, users must log in with initials or email plus a PIN. Records are stored in D1 and shared across users.
 
 The app uses three access levels:
 
-- `user`: can log in, search, view records, print, and export visible data.
-- `allocator`: semi-admin access; can reserve/take component numbers, edit records, save revisions, import records, run OCR, and delete records.
-- `admin`: full access; includes allocator permissions plus user management.
+- `user` / VIEW: can log in, search, view records, print, and export Excel data. It cannot edit numbers or use JSON backup.
+- `allocator` / PLAN: can do everything VIEW can do, plus add or remove orange `Projekt` reservations on existing records and save those project changes. It cannot create records, edit master data, import, scan, delete, or change blue/red statuses.
+- `admin` / ADMIN: full access. Admin can create records, maintain master data, change all statuses, import Access/Excel/CSV or scan data, export JSON backup, delete records, and manage users.
 
 See [backend/README.md](backend/README.md) for Worker deployment, D1 setup, secrets, migrations, and admin bootstrap instructions.
 
@@ -123,7 +126,7 @@ See [backend/README.md](backend/README.md) for Worker deployment, D1 setup, secr
 
 The Worker in `backend/src/index.js` provides:
 
-- `POST /auth/login` for initials + PIN authentication.
+- `POST /auth/login` for initials/email + PIN authentication.
 - `GET /auth/me` for checking the current token.
 - `GET /admin/users` and `POST /admin/users` for admin-only user management.
 - `GET /records`, `GET /records/:id`, `POST /records/upsert`, and `DELETE /records/:id` for shared records.
@@ -132,7 +135,9 @@ The Worker in `backend/src/index.js` provides:
 
 PINs are stored as PBKDF2 hashes with a random salt. Login returns a signed bearer token. Each authenticated request verifies the token and checks that the user still exists and is not disabled.
 
-Read-only record routes require any valid user. Record-changing routes require `allocator` or `admin`.
+Read-only record routes require any valid user. Record-changing routes require `allocator` or `admin`, but the backend also enforces that `allocator` users can only change orange project reservations on existing records.
+
+The current password reset UI is a prototype mail link to the administrator. A production reset flow should add one-time reset tokens and an email provider such as Microsoft Graph, SendGrid, or another approved mail service.
 
 ## Important Configuration
 

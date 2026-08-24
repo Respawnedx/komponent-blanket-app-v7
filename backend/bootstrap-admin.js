@@ -1,10 +1,11 @@
-// Usage: node bootstrap-admin.js <INITIALS> <PIN>
+// Usage: node bootstrap-admin.js <INITIALS> <PIN> [EMAIL]
 // Prints SQL to insert/update an admin user in D1.
 
 const crypto = require('crypto');
 
 const initials = (process.argv[2] || '').trim().toUpperCase();
 const pin = (process.argv[3] || '').trim();
+const email = (process.argv[4] || '').trim().toLowerCase();
 
 if (!initials || !pin) {
   console.error('Usage: node bootstrap-admin.js <INITIALS> <PIN>');
@@ -23,8 +24,8 @@ const saltHex = salt.toString('hex');
 const hashHex = hash.toString('hex');
 const ts = new Date().toISOString();
 
-const sql = `INSERT INTO users(initials, role, pin_salt, pin_hash, disabled, created_at, created_by)
-VALUES('${initials}', 'admin', '${saltHex}', '${hashHex}', 0, '${ts}', '${initials}')
-ON CONFLICT(initials) DO UPDATE SET role='admin', pin_salt='${saltHex}', pin_hash='${hashHex}', disabled=0;`;
+const sql = `INSERT INTO users(initials, email, role, pin_salt, pin_hash, disabled, created_at, created_by)
+VALUES('${initials}', ${email ? `'${email.replace(/'/g, "''")}'` : 'NULL'}, 'admin', '${saltHex}', '${hashHex}', 0, '${ts}', '${initials}')
+ON CONFLICT(initials) DO UPDATE SET email=excluded.email, role='admin', pin_salt='${saltHex}', pin_hash='${hashHex}', disabled=0;`;
 
 console.log(sql);

@@ -1,12 +1,12 @@
 # Backend: Cloudflare Workers + D1
 
-This backend stores shared component-blanket records, handles initials + PIN login, manages users, and writes audit events.
+This backend stores shared component records, handles initials/email + PIN login, manages users, and writes audit events.
 
 ## Access Levels
 
 - `user`: read-only access for searching, viewing, printing, and exporting existing records.
-- `allocator`: semi-admin access for reserving/taking component numbers, editing records, importing, OCR changes, and deleting records.
-- `admin`: full access, including creating and updating users.
+- `allocator`: planner access. It can only add or remove orange project reservations on existing records. It cannot create records, edit master data, import, OCR, delete, or change blue/red statuses.
+- `admin`: full access, including user management, imports, OCR/scan, record creation, status changes, JSON backup, and deletes.
 
 ## Requirements
 
@@ -39,7 +39,7 @@ wrangler d1 migrations apply komponent_db --remote
 
 This creates:
 
-- `users` for login and roles.
+- `users` for login, email lookup, and roles.
 - `records` for saved component forms.
 - `audit` for user actions and record changes.
 
@@ -87,12 +87,12 @@ The app requires an admin user before more users can be created from the UI.
 Use the bootstrap helper:
 
 ```bash
-node bootstrap-admin.js AB 5678
+node bootstrap-admin.js AB 5678 ab@arlafoods.com
 ```
 
 The script prints SQL that inserts an admin user with a hashed PIN. Run that SQL in the Cloudflare D1 console or with `wrangler d1 execute`.
 
-After that, log in as the admin user in the app and use **Admin: Opret bruger** to create or update users.
+After that, log in as the admin user in the app and use **Brugere** to create or update users.
 
 ## API Routes
 
@@ -111,12 +111,12 @@ Login accepts:
 
 ```json
 {
-  "initials": "AB",
+  "login": "ab@arlafoods.com",
   "pin": "5678"
 }
 ```
 
-It returns a bearer token plus the user initials and role.
+It also accepts `"initials": "AB"` for the same endpoint. The response returns a bearer token plus the user initials, email, and role.
 
 ### Admin Users
 
@@ -130,12 +130,13 @@ Create or update a user:
 ```json
 {
   "initials": "AB",
+  "email": "ab@arlafoods.com",
   "pin": "5678",
   "role": "allocator"
 }
 ```
 
-PINs must be 4-8 digits. Accepted roles are `user`, `allocator`, and `admin`. The aliases `semi-admin`, `semi_admin`, and `editor` are normalized to `allocator`.
+PINs must be 4-8 digits. Accepted roles are `user`, `allocator`, `planner`, and `admin`. The aliases `planner`, `semi-admin`, `semi_admin`, and `editor` are normalized to `allocator`.
 
 ### Records
 
@@ -148,7 +149,7 @@ Records are stored as structured columns for indexing plus the full JSON payload
 
 `POST /records/upsert` sets server-authoritative `editedBy` and `updatedAt` values before storing the record.
 
-`GET /records` and `GET /records/:id` require any valid logged-in user. `POST /records/upsert` and `DELETE /records/:id` require `allocator` or `admin`.
+`GET /records` and `GET /records/:id` require any valid logged-in user. `POST /records/upsert` requires `allocator` or `admin`; the server verifies that `allocator` users only change orange project reservations on existing records. `DELETE /records/:id` requires `admin`.
 
 ### Audit
 
@@ -166,3 +167,4 @@ Writing audit rows through `POST /audit` requires `allocator` or `admin`.
 - Tokens are signed with `TOKEN_SECRET`.
 - Every protected route verifies the token and checks that the user still exists and is not disabled.
 - CORS is controlled by `ALLOWED_ORIGINS`; add local development origins there when testing.
+- The current password reset UI is a prototype mail link to an administrator. A production reset flow should use one-time tokens and an approved email provider.
