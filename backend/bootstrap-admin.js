@@ -1,4 +1,4 @@
-// Usage: node bootstrap-admin.js NJ 1234
+// Usage: node bootstrap-admin.js <INITIALS> <PIN>
 // Prints SQL to insert/update an admin user in D1.
 
 const crypto = require('crypto');

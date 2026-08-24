@@ -7,6 +7,21 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function normalizeRole(role) {
+  const raw = String(role || "user").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (raw === "admin") return "admin";
+  if (["allocator", "semi_admin", "semiadmin", "editor", "manager"].includes(raw)) return "allocator";
+  return "user";
+}
+
+function canWriteRecords(user) {
+  const role = normalizeRole(user?.role);
+  return role === "admin" || role === "allocator";
+}
+
+function canManageUsers(user) {
+  return normalizeRole(user?.role) === "admin";
+}
 
 function parseMainNumber(raw) {
   const str = String(raw || "").trim();
@@ -123,25 +138,26 @@ function parseAllowedOrigins(env) {
 }
 
 function corsHeaders(origin, allowed) {
-  // More forgiving CORS for development + GitHub Pages.
-  // If ALLOWED_ORIGINS is set, we still allow the caller origin so local dev (localhost) works,
-  // while production can still pin it via your reverse-proxy / token security.
-  let allowOrigin = "*";
-  if (origin) {
-    if (allowed && allowed.length) {
-      if (allowed.includes("*") || allowed.includes(origin)) allowOrigin = allowed.includes("*") ? "*" : origin;
-      else allowOrigin = origin; // allow other origins (e.g., localhost dev)
-    } else {
-      allowOrigin = origin;
-    }
-  }
-  return {
-    "Access-Control-Allow-Origin": allowOrigin,
+  const headers = {
     "Vary": "Origin",
     "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Max-Age": "86400",
   };
+
+  let allowOrigin = null;
+  if (origin) {
+    if (allowed && allowed.length) {
+      if (allowed.includes("*") || allowed.includes(origin)) allowOrigin = allowed.includes("*") ? "*" : origin;
+    } else {
+      allowOrigin = origin;
+    }
+  } else {
+    allowOrigin = "*";
+  }
+
+  if (allowOrigin) headers["Access-Control-Allow-Origin"] = allowOrigin;
+  return headers;
 }
 
 function jsonResponse(data, origin, allowed, status = 200) {
@@ -209,7 +225,7 @@ async function requireAuth(env, request) {
   ).bind(String(tok.initials)).first();
 
   if (!row || row.disabled) return null;
-  return { initials: row.initials, role: row.role };
+  return { initials: row.initials, role: normalizeRole(row.role) };
 }
 
 async function writeAudit(env, entry) {
@@ -271,9 +287,10 @@ export default {
 
       const ttl = Number(env.TOKEN_TTL_SECONDS || "604800");
       const now = Math.floor(Date.now() / 1000);
+      const role = normalizeRole(row.role);
       const payload = {
         initials: row.initials,
-        role: row.role,
+        role,
         iat: now,
         exp: now + ttl,
         jti: randomHex(8),
@@ -281,7 +298,7 @@ export default {
 
       const token = await signToken(env, payload);
       await writeAudit(env, { initials: row.initials, action: "LOGIN" });
-      return jsonResponse({ token, initials: row.initials, role: row.role }, origin, allowed);
+      return jsonResponse({ token, initials: row.initials, role }, origin, allowed);
     }
 
     if (url.pathname === "/auth/me" && request.method === "GET") {
@@ -293,7 +310,7 @@ export default {
     // --- Admin: users ---
     if (url.pathname === "/admin/users" && request.method === "GET") {
       const user = await requireAuth(env, request);
-      if (!user || user.role !== "admin") return jsonResponse({ error: "Forbidden" }, origin, allowed, 403);
+      if (!user || !canManageUsers(user)) return jsonResponse({ error: "Forbidden" }, origin, allowed, 403);
 
       const { results } = await env.DB.prepare(
         "SELECT initials, role, disabled, created_at, created_by FROM users ORDER BY initials"
@@ -303,12 +320,12 @@ export default {
 
     if (url.pathname === "/admin/users" && request.method === "POST") {
       const user = await requireAuth(env, request);
-      if (!user || user.role !== "admin") return jsonResponse({ error: "Forbidden" }, origin, allowed, 403);
+      if (!user || !canManageUsers(user)) return jsonResponse({ error: "Forbidden" }, origin, allowed, 403);
 
       const body = await readJson(request);
       const initials = String(body?.initials || "").trim().toUpperCase();
       const pin = String(body?.pin || "").trim();
-      const role = String(body?.role || "user").trim().toLowerCase() === "admin" ? "admin" : "user";
+      const role = normalizeRole(body?.role || "user");
 
       if (!initials || !pin) return jsonResponse({ error: "initials+pin required" }, origin, allowed, 400);
       if (!/^\d{4,8}$/.test(pin)) return jsonResponse({ error: "PIN must be 4-8 digits" }, origin, allowed, 400);
@@ -351,6 +368,7 @@ export default {
     if (url.pathname === "/records/upsert" && request.method === "POST") {
       const user = await requireAuth(env, request);
       if (!user) return jsonResponse({ error: "Unauthorized" }, origin, allowed, 401);
+      if (!canWriteRecords(user)) return jsonResponse({ error: "Semi-admin or admin access required" }, origin, allowed, 403);
 
       const rec = await readJson(request);
       if (!rec || !rec.id) return jsonResponse({ error: "record.id required" }, origin, allowed, 400);
@@ -430,6 +448,7 @@ export default {
     if (url.pathname.startsWith("/records/") && request.method === "DELETE") {
       const user = await requireAuth(env, request);
       if (!user) return jsonResponse({ error: "Unauthorized" }, origin, allowed, 401);
+      if (!canWriteRecords(user)) return jsonResponse({ error: "Semi-admin or admin access required" }, origin, allowed, 403);
 
       const id = decodeURIComponent(url.pathname.slice("/records/".length));
       const row = await env.DB.prepare("SELECT hovedkomponentnr FROM records WHERE id=?").bind(id).first();
@@ -447,6 +466,7 @@ export default {
     if (url.pathname === "/audit" && request.method === "POST") {
       const user = await requireAuth(env, request);
       if (!user) return jsonResponse({ error: "Unauthorized" }, origin, allowed, 401);
+      if (!canWriteRecords(user)) return jsonResponse({ error: "Semi-admin or admin access required" }, origin, allowed, 403);
 
       const body = await readJson(request);
       await writeAudit(env, {

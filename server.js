@@ -46,16 +46,17 @@ function serveStatic(req, res, pathname){
   let filePath = null;
 
   if(map[pathname]){
-    filePath = path.join(ROOT, map[pathname]);
+    filePath = path.resolve(ROOT, map[pathname]);
   }else if(pathname.startsWith("/assets/")){
     // Prevent path traversal
     const safe = pathname.replace(/^\/+/, "");
-    filePath = path.join(ROOT, safe);
+    filePath = path.resolve(ROOT, safe);
   }else{
     return false;
   }
 
-  if(!filePath.startsWith(ROOT)) return false;
+  const relativePath = path.relative(ROOT, filePath);
+  if(relativePath.startsWith("..") || path.isAbsolute(relativePath)) return false;
   if(!fs.existsSync(filePath)) return false;
 
   const ext = path.extname(filePath).toLowerCase();

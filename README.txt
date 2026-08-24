@@ -57,7 +57,7 @@ Logning (audit)
 - Alt gemmes lokalt i browseren (localStorage), eller i data/records.json hvis du bruger server.js.
 
 Mini-login
-- Klik 'Login' og angiv initialer (fx NIJEY).
+- Klik 'Login' og angiv initialer (fx AB).
 - Hvis du markerer 'Admin' kræver det password (ændres i app.js: ADMIN_PASSWORD).
 - Når du ikke er logget ind, er checkboxe, OCR og "Gem" låst (read-only).
 - Dette er et lokalt "mini-login" til logning – ikke sikkerhed.

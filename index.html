@@ -9,7 +9,7 @@
 <body>
   <header class="topbar">
     <div class="topbar__left">
-      <img src="./assets/afi-logo.svg" alt="Arla Foods Ingredients" class="topbar__logo" />
+      <img src="./assets/afi-logo.png" alt="Arla Foods Ingredients" class="topbar__logo" />
       <div class="topbar__brand">
         <strong>Komponent-blanket</strong>
         <span class="muted">— UX som skabelonen</span>
@@ -29,6 +29,29 @@
       <button id="btnExportExcel" class="btn">Eksportér Excel</button>
     </div>
   </header>
+
+  <main id="authGate" class="authGate" aria-label="Login">
+    <section class="authCard">
+      <img src="./assets/afi-logo.png" alt="Arla Foods Ingredients" class="authCard__logo" />
+      <div>
+        <h1 class="authCard__title">Komponent-blanket</h1>
+        <p class="authCard__text">Log ind for at se og søge i komponentnumre.</p>
+      </div>
+
+      <div class="authCard__fields">
+        <label class="modal__label" for="gateLoginInitials">Initialer</label>
+        <input id="gateLoginInitials" class="input" placeholder="AB" autocomplete="username" />
+
+        <label class="modal__label" for="gateLoginPin">PIN</label>
+        <input id="gateLoginPin" class="input" type="password" placeholder="••••" autocomplete="current-password" />
+      </div>
+
+      <div id="gateLoginError" class="authError" role="alert" aria-live="polite"></div>
+
+      <button class="btn btn--primary authCard__submit" id="btnGateLogin" type="button">Log ind</button>
+      <div class="authCard__help muted">Ikke oprettet? Kontakt en administrator.</div>
+    </section>
+  </main>
 
   <main class="workspace">
     <aside class="sidebar">
@@ -284,8 +307,8 @@
       </div>
 
       <div class="modal__body">
-        <label class="modal__label">Initialer (fx NIJEY)</label>
-        <input id="loginInitials" class="input" placeholder="NIJEY" />
+        <label class="modal__label">Initialer (fx AB)</label>
+        <input id="loginInitials" class="input" placeholder="AB" />
 
         <label class="modal__label">PIN (4-8 cifre)</label>
         <input id="loginPin" class="input" type="password" placeholder="••••" autocomplete="current-password" />

@@ -1,121 +1,168 @@
-# Komponent-blanket backend (Cloudflare Workers + D1)
+# Backend: Cloudflare Workers + D1
 
-Dette er en lille backend til **komponent-blanket-app**:
+This backend stores shared component-blanket records, handles initials + PIN login, manages users, and writes audit events.
 
-- Login med **initialer + PIN**
-- Delte poster (records) for alle brugere
-- Audit-log (hvem gjorde hvad, hvornår)
+## Access Levels
 
-## 1) Forudsætninger
+- `user`: read-only access for searching, viewing, printing, and exporting existing records.
+- `allocator`: semi-admin access for reserving/taking component numbers, editing records, importing, OCR changes, and deleting records.
+- `admin`: full access, including creating and updating users.
+
+## Requirements
+
 - Node.js
-- Cloudflare account
+- A Cloudflare account
 - Wrangler CLI
 
-Installer Wrangler og log ind:
+Install and log in:
 
 ```bash
 npm i -g wrangler
 wrangler login
 ```
 
-## 2) Opret D1 database
+## Create the D1 Database
+
+From the `backend` folder:
 
 ```bash
-cd backend
 wrangler d1 create komponent_db
 ```
 
-Kopiér `database_id` ind i `wrangler.toml` under `[[d1_databases]]`.
+Copy the generated `database_id` into `wrangler.toml` under `[[d1_databases]]`.
 
-## 3) Kør migrations (opret tabeller)
+## Apply Migrations
 
 ```bash
 wrangler d1 migrations apply komponent_db --remote
 ```
 
-## 4) Sæt secrets
+This creates:
 
-Du skal sætte mindst disse secrets:
+- `users` for login and roles.
+- `records` for saved component forms.
+- `audit` for user actions and record changes.
+
+## Configure Secrets and Variables
+
+Set the token signing secret:
 
 ```bash
 wrangler secret put TOKEN_SECRET
 ```
 
-Vælg en lang tilfældig streng (fx 32+ tegn).
+Use a long random value.
 
-## 5) Deploy backend
+`wrangler.toml` also contains:
+
+- `ALLOWED_ORIGINS`: comma-separated frontend origins allowed by CORS.
+- `TOKEN_TTL_SECONDS`: bearer token lifetime in seconds.
+
+Example:
+
+```toml
+[vars]
+ALLOWED_ORIGINS = "https://respawnedx.github.io,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5500,http://127.0.0.1:5500"
+TOKEN_TTL_SECONDS = "604800"
+```
+
+## Deploy
 
 ```bash
 wrangler deploy
 ```
 
-Du får en URL som fx:
+After deployment, set the frontend API URL in the root `index.html`:
 
+```html
+<script>
+  window.COMPONENT_APP_API = "https://your-worker-url.workers.dev";
+</script>
 ```
-https://komponent-blanket-backend.<dit-subdomain>.workers.dev
-```
 
-## 6) Opret første admin-bruger
+## Create the First Admin User
 
-**Du skal have mindst én admin**, før du kan oprette andre brugere via app’en.
+The app requires an admin user before more users can be created from the UI.
 
-Kør dette i terminalen (erstat URL og PIN):
+Use the bootstrap helper:
 
 ```bash
-curl -X POST "https://DIN-WORKER-URL/admin/users" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer DIN_TOKEN" \
-  -d '{"initials":"NJ","pin":"1234","role":"admin"}'
+node bootstrap-admin.js AB 5678
 ```
 
-Men du har endnu ikke et token… så du gør det sådan her første gang:
+The script prints SQL that inserts an admin user with a hashed PIN. Run that SQL in the Cloudflare D1 console or with `wrangler d1 execute`.
 
-### Første admin (bootstrap)
+After that, log in as the admin user in the app and use **Admin: Opret bruger** to create or update users.
 
-1. Deploy backend.
-2. Åbn Cloudflare dashboard → D1 → **komponent_db** → Console.
-3. Indsæt en admin-bruger direkte i tabellen `users`:
+## API Routes
 
-- `initials` = fx `NJ`
-- `role` = `admin`
-- `pin_salt` og `pin_hash` skal være gyldige.
+### Health
 
-**Nemmere metode:** Brug `bootstrap-admin.js` (nedenfor) som genererer salt/hash og laver insert via `wrangler d1 execute`.
+- `GET /health`
 
-### Bootstrap script
+Returns `{ ok: true, ts }`.
 
-Kør:
+### Authentication
 
-```bash
-node bootstrap-admin.js NJ 1234
+- `POST /auth/login`
+- `GET /auth/me`
+
+Login accepts:
+
+```json
+{
+  "initials": "AB",
+  "pin": "5678"
+}
 ```
 
-Det genererer en `INSERT`-SQL du kan copy/paste i D1 Console.
+It returns a bearer token plus the user initials and role.
 
-## 7) Kobl frontend på backend
+### Admin Users
 
-I repo-roden (frontend) ligger der i `index.html`:
+- `GET /admin/users`
+- `POST /admin/users`
 
-```js
-window.COMPONENT_APP_API = "";
+These routes require an authenticated admin token.
+
+Create or update a user:
+
+```json
+{
+  "initials": "AB",
+  "pin": "5678",
+  "role": "allocator"
+}
 ```
 
-Sæt den til din Worker-URL (uden trailing slash), fx:
+PINs must be 4-8 digits. Accepted roles are `user`, `allocator`, and `admin`. The aliases `semi-admin`, `semi_admin`, and `editor` are normalized to `allocator`.
 
-```js
-window.COMPONENT_APP_API = "https://komponent-blanket-backend.<dit-subdomain>.workers.dev";
-```
+### Records
 
-## 8) Opret brugere
+- `GET /records`
+- `GET /records/:id`
+- `POST /records/upsert`
+- `DELETE /records/:id`
 
-Når du er logget ind som **admin** i app’en, får du knappen:
+Records are stored as structured columns for indexing plus the full JSON payload used by the frontend.
 
-**“Admin: Opret bruger”**
+`POST /records/upsert` sets server-authoritative `editedBy` and `updatedAt` values before storing the record.
 
-Den opretter/overskriver en bruger (initialer + PIN).
+`GET /records` and `GET /records/:id` require any valid logged-in user. `POST /records/upsert` and `DELETE /records/:id` require `allocator` or `admin`.
 
----
+### Audit
 
-### Tips
-- Hvis du tester lokalt, er `ALLOWED_ORIGINS` sat til at tillade `http://localhost:5500`.
-- Audit kan hentes via `GET /audit` eller `GET /audit?record_id=<id>`.
+- `GET /audit`
+- `GET /audit?record_id=<id>`
+- `POST /audit`
+
+Audit rows track logins, saves, deletes, admin actions, and frontend-supplied events.
+
+Writing audit rows through `POST /audit` requires `allocator` or `admin`.
+
+## Security Notes
+
+- PINs are hashed with PBKDF2 and a random salt.
+- Tokens are signed with `TOKEN_SECRET`.
+- Every protected route verifies the token and checks that the user still exists and is not disabled.
+- CORS is controlled by `ALLOWED_ORIGINS`; add local development origins there when testing.

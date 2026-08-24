@@ -40,7 +40,7 @@ let selectedRecordIds = new Set();
 let activeId = null;
 // codeSource: {'01':'scan'|'manual'} for currently checked codes
 let codeSource = {};
-// codeMeta: {'01': {by:'NIJEY', at:'ISO', source:'manual'|'scan'}} for currently checked codes
+// codeMeta: {'01': {by:'AB', at:'ISO', source:'manual'|'scan'}} for currently checked codes
 let codeMeta = {};
 // buffer of unsaved fine-grained changes (checkbox clicks etc.)
 let changeBuffer = [];
@@ -433,8 +433,8 @@ function setFilterMode(filter){
 
 function rebuildGrids(){
   document.querySelectorAll(".grid").forEach(buildGrid);
-  // Ensure newly built checkboxes follow login state
-  setEditingEnabled(!!getCurrentUser());
+  // Ensure newly built checkboxes follow the current access level.
+  setEditingEnabled(canAllocateNumbers());
   updateSelectedCodes();
 }
 
@@ -459,9 +459,35 @@ function clearSeriesCodes(series){
 const AUTH_KEY = "componentFormAuth_v2";
 const API_BASE = (window.COMPONENT_APP_API || "").trim().replace(/\/+$/,"");
 const USE_CLOUD = !!API_BASE;
+const ROLE_USER = "user";
+const ROLE_ALLOCATOR = "allocator";
+const ROLE_ADMIN = "admin";
 
 // Local fallback storage key (bruges kun hvis USE_CLOUD=false)
 const USER_KEY = "componentFormUser_v1"; // legacy key for backward compatibility
+
+function normalizeRole(role){
+  const raw = String(role || ROLE_USER).trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if(raw === ROLE_ADMIN) return ROLE_ADMIN;
+  if(["allocator", "semi_admin", "semiadmin", "editor", "manager"].includes(raw)) return ROLE_ALLOCATOR;
+  return ROLE_USER;
+}
+
+function roleLabel(role){
+  const r = normalizeRole(role);
+  if(r === ROLE_ADMIN) return "admin";
+  if(r === ROLE_ALLOCATOR) return "semi-admin";
+  return "visning";
+}
+
+function canAllocateNumbers(user = getCurrentUser()){
+  const role = normalizeRole(user?.role);
+  return role === ROLE_ADMIN || role === ROLE_ALLOCATOR;
+}
+
+function canManageUsers(user = getCurrentUser()){
+  return normalizeRole(user?.role) === ROLE_ADMIN;
+}
 
 function getAuth(){
   try{
@@ -474,6 +500,7 @@ function getAuth(){
 }
 
 function setAuth(auth){
+  if(auth?.user) auth.user.role = normalizeRole(auth.user.role);
   localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
   updateUserBadge();
 }
@@ -485,7 +512,8 @@ function clearAuth(){
 
 function getCurrentUser(){
   const auth = getAuth();
-  return auth?.user ?? null;
+  if(!auth?.user) return null;
+  return { ...auth.user, role: normalizeRole(auth.user.role) };
 }
 
 function getToken(){
@@ -525,10 +553,14 @@ async function cloudLogin(initials, pin){
   });
 }
 
+async function cloudMe(){
+  return apiFetch("/auth/me", { method: "GET" });
+}
+
 async function cloudCreateUser(initials, pin, role="user"){
   return apiFetch("/admin/users", {
     method: "POST",
-    body: JSON.stringify({ initials, pin, role }),
+    body: JSON.stringify({ initials, pin, role: normalizeRole(role) }),
   });
 }
 
@@ -540,9 +572,23 @@ function requireLogin(reason = "Du skal være logget ind for at kunne redigere."
   return null;
 }
 
+function requireAllocator(reason = "Du skal have semi-admin eller admin adgang for at kunne udtage/redigere numre."){
+  const user = requireLogin(reason);
+  if(!user) return null;
+  if(canAllocateNumbers(user)) return user;
+  alert(reason);
+  return null;
+}
+
+function updateAuthGate(){
+  const user = getCurrentUser();
+  document.body.classList.toggle("is-authenticated", !!user);
+}
+
 function updateUserBadge(){
   const badge = document.getElementById("userBadge");
   const user = getCurrentUser();
+  updateAuthGate();
   if(!badge) return;
 
   const mode = USE_CLOUD ? "cloud" : "lokal";
@@ -555,9 +601,9 @@ function updateUserBadge(){
     return;
   }
 
-  badge.textContent = `${user.initials}${user.role === "admin" ? " (admin)" : ""} (${mode})`;
+  badge.textContent = `${user.initials} (${roleLabel(user.role)}) (${mode})`;
   badge.style.color = "#111";
-  setEditingEnabled(true);
+  setEditingEnabled(canAllocateNumbers(user));
   updateAdminUi();
 }
 
@@ -565,7 +611,7 @@ function updateAdminUi(){
   const btn = document.getElementById("btnAdminCreateUser");
   const user = getCurrentUser();
   if(!btn) return;
-  const show = USE_CLOUD && user && user.role === "admin";
+  const show = USE_CLOUD && user && canManageUsers(user);
   btn.style.display = show ? "inline-flex" : "none";
 }
 
@@ -579,6 +625,23 @@ function setEditingEnabled(enabled){
 
   const btnSave = document.getElementById("btnSave");
   if(btnSave) btnSave.disabled = !enabled;
+
+  const btnNew = document.getElementById("btnNew");
+  if(btnNew) btnNew.disabled = !enabled;
+
+  const btnImport = document.getElementById("btnImport");
+  if(btnImport) btnImport.disabled = !enabled;
+
+  const btnImportExcelTags = document.getElementById("btnImportExcelTags");
+  if(btnImportExcelTags) btnImportExcelTags.disabled = !enabled;
+
+  [fields.desc, fields.plant, fields.pid, fields.sign1, fields.sign2].forEach(field => {
+    if(field) field.readOnly = !enabled;
+  });
+
+  document.querySelectorAll("#markSeg .segBtn, #pidSeg .segBtn").forEach(btn => {
+    btn.disabled = !enabled;
+  });
 }
 
 
@@ -631,7 +694,7 @@ function buildGrid(gridEl){
 
     // Initial state from memory (kan indeholde 0xx + 1xx + ...)
     cb.checked = !!codeSource[codeKey];
-    cb.disabled = !getCurrentUser();
+    cb.disabled = !canAllocateNumbers();
 
     // Right-click: force red mark without unchecking
     cb.addEventListener("contextmenu", (e) => {
@@ -639,6 +702,10 @@ function buildGrid(gridEl){
       const user = getCurrentUser();
       if(!user){
         requireLogin("Du skal være logget ind for at kunne sætte krydser.");
+        return;
+      }
+      if(!canAllocateNumbers(user)){
+        alert("Du skal have semi-admin eller admin adgang for at kunne udtage/redigere numre.");
         return;
       }
 
@@ -681,6 +748,11 @@ function buildGrid(gridEl){
       if(!user){
         cb.checked = !cb.checked;
         requireLogin("Du skal være logget ind for at kunne sætte krydser.");
+        return;
+      }
+      if(!canAllocateNumbers(user)){
+        cb.checked = !cb.checked;
+        alert("Du skal have semi-admin eller admin adgang for at kunne udtage/redigere numre.");
         return;
       }
 
@@ -945,6 +1017,10 @@ function applyCheckChange(codeKey, checked, markOverride=null){
   const user = getCurrentUser();
   if(!user){
     requireLogin("Du skal være logget ind for at kunne sætte krydser.");
+    return;
+  }
+  if(!canAllocateNumbers(user)){
+    alert("Du skal have semi-admin eller admin adgang for at kunne udtage/redigere numre.");
     return;
   }
 
@@ -1332,27 +1408,6 @@ function renderRecordList(){
     actions.style.display = "flex";
     actions.style.gap = "8px";
 
-    const btnDel = document.createElement("button");
-    btnDel.className = "btn";
-    btnDel.textContent = "Slet";
-    btnDel.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if(confirm("Slet posten?")){
-        (async () => {
-          try{
-            await deleteRecord(rec.id);
-            selectedRecordIds.delete(rec.id);
-            updateSelectedRecordCount();
-            if(activeId === rec.id) clearForm();
-            renderRecordList();
-            await logAudit({ action: "DELETE", record_id: rec.id, hovednr: rec.hovedkomponentnr || null });
-          }catch(err){
-            alert("Kunne ikke slette: " + (err?.message ?? err));
-          }
-        })();
-      }
-    });
-
     const btnUse = document.createElement("button");
     btnUse.className = "btn btn--primary";
     btnUse.textContent = "Åbn";
@@ -1363,7 +1418,30 @@ function renderRecordList(){
     });
 
     actions.appendChild(btnUse);
-    actions.appendChild(btnDel);
+
+    if(canAllocateNumbers()){
+      const btnDel = document.createElement("button");
+      btnDel.className = "btn";
+      btnDel.textContent = "Slet";
+      btnDel.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if(confirm("Slet posten?")){
+          (async () => {
+            try{
+              await deleteRecord(rec.id);
+              selectedRecordIds.delete(rec.id);
+              updateSelectedRecordCount();
+              if(activeId === rec.id) clearForm();
+              renderRecordList();
+              await logAudit({ action: "DELETE", record_id: rec.id, hovednr: rec.hovedkomponentnr || null });
+            }catch(err){
+              alert("Kunne ikke slette: " + (err?.message ?? err));
+            }
+          })();
+        }
+      });
+      actions.appendChild(btnDel);
+    }
 
     card.appendChild(top);
     card.appendChild(meta);
@@ -1414,15 +1492,17 @@ document.getElementById("btnImport").addEventListener("click", () => importFile.
 importFile.addEventListener("change", async () => {
   const file = importFile.files?.[0];
   if(!file) return;
+  const importUser = requireAllocator("Du skal have semi-admin eller admin adgang for at importere poster.");
+  if(!importUser){
+    importFile.value = "";
+    return;
+  }
   try{
     const text = await file.text();
     const records = JSON.parse(text);
     if(!Array.isArray(records)) throw new Error("JSON skal være en liste (array) af poster.");
 
     if(USE_CLOUD){
-      const user = requireLogin("Du skal være logget ind for at importere til cloud.");
-      if(!user) return;
-
       if(!confirm("Importér til cloud? (OK = cloud, Annuller = lokal)")){
         saveRecordsLocal(records);
         activeId = records[0]?.id ?? null;
@@ -1479,7 +1559,7 @@ function findRecordByMainKey(mainKey){
 async function importTagsFromExcel(file){
   if(!file) return;
 
-  const user = requireLogin("Du skal være logget ind for at importere Excel (det opretter/ajourfører poster og logger initialer). ");
+  const user = requireAllocator("Du skal have semi-admin eller admin adgang for at importere Excel (det opretter/ajourfører poster og logger initialer).");
   if(!user) return;
 
   if(typeof XLSX === "undefined"){
@@ -1704,7 +1784,7 @@ scanFile.addEventListener("change", async () => {
   const file = scanFile.files?.[0];
   if(!file) return;
 
-  const user = requireLogin("Du skal være logget ind for at køre OCR (det ændrer krydser og logger initialer).");
+  const user = requireAllocator("Du skal have semi-admin eller admin adgang for at køre OCR (det ændrer krydser og logger initialer).");
   if(!user){
     scanFile.value = "";
     return;
@@ -1938,6 +2018,14 @@ const btnLoginSave = document.getElementById("btnLoginSave");
 const btnLogout = document.getElementById("btnLogout");
 const loginInitials = document.getElementById("loginInitials");
 const loginPin = document.getElementById("loginPin");
+const gateLoginInitials = document.getElementById("gateLoginInitials");
+const gateLoginPin = document.getElementById("gateLoginPin");
+const gateLoginError = document.getElementById("gateLoginError");
+const btnGateLogin = document.getElementById("btnGateLogin");
+
+function setGateError(message = ""){
+  if(gateLoginError) gateLoginError.textContent = message;
+}
 
 function openLogin(){
   const user = getCurrentUser();
@@ -1963,46 +2051,62 @@ btnLogin.addEventListener("click", () => {
 btnLoginClose.addEventListener("click", closeLogin);
 loginModal.querySelector(".modal__backdrop").addEventListener("click", closeLogin);
 
-btnLoginSave.addEventListener("click", async () => {
-  const initials = (loginInitials.value || "").trim().toUpperCase();
-  const pin = (loginPin?.value || "").trim();
+async function performLogin(initials, pin, options = {}){
+  const source = options.source || "modal";
+  const showInlineError = source === "gate";
 
   if(!initials){
-    alert("Skriv initialer (fx NIJEY).");
-    return;
+    const msg = "Skriv initialer.";
+    if(showInlineError) setGateError(msg);
+    else alert(msg);
+    return false;
   }
+  setGateError("");
+
   if(USE_CLOUD){
     if(!/^\d{4,8}$/.test(pin)){
-      alert("PIN skal være 4–8 cifre.");
-      return;
+      const msg = "PIN skal være 4-8 cifre.";
+      if(showInlineError) setGateError(msg);
+      else alert(msg);
+      return false;
     }
     try{
       const data = await cloudLogin(initials, pin);
       setAuth({ token: data.token, user: { initials: data.initials, role: data.role } });
       closeLogin();
       await refreshRecords();
-      alert("Logget ind (cloud).");
+      return true;
     }catch(err){
       const msg = (err?.message ?? String(err));
       if(/Failed to fetch|NetworkError|CORS/i.test(msg)){
-        alert(
+        const text =
           "Login fejlede (forbindelse/CORS).\n\n" +
           "Hvis du kører lokalt (localhost/Live Server), skal backend tillade din origin i CORS.\n" +
           "Alternativt: kør via GitHub Pages/den tilladte URL.\n\n" +
-          "Teknisk fejl: " + msg
-        );
+          "Teknisk fejl: " + msg;
+        if(showInlineError) setGateError(text);
+        else alert(text);
       }else{
-        alert("Login fejlede: " + msg);
+        const text = "Login fejlede: " + msg;
+        if(showInlineError) setGateError(text);
+        else alert(text);
       }
+      return false;
     }
   }else{
     // Lokal fallback: gem kun initialer (ingen rigtig sikkerhed)
     localStorage.setItem(USER_KEY, JSON.stringify({ initials, role: "user" }));
-    setAuth({ token: null, user: { initials, role: "user" } });
+    setAuth({ token: null, user: { initials, role: ROLE_ALLOCATOR } });
     closeLogin();
     renderRecordList();
-    alert("Logget ind (lokal).");
+    return true;
   }
+}
+
+btnLoginSave.addEventListener("click", async () => {
+  const initials = (loginInitials.value || "").trim().toUpperCase();
+  const pin = (loginPin?.value || "").trim();
+  await performLogin(initials, pin, { source: "modal" });
 });
 
 btnLogout.addEventListener("click", async () => {
@@ -2012,6 +2116,25 @@ btnLogout.addEventListener("click", async () => {
     recordsCache = [];
     renderRecordList();
   }
+});
+
+if(btnGateLogin){
+  btnGateLogin.addEventListener("click", async () => {
+    const initials = (gateLoginInitials?.value || "").trim().toUpperCase();
+    const pin = (gateLoginPin?.value || "").trim();
+    const ok = await performLogin(initials, pin, { source: "gate" });
+    if(ok && gateLoginPin) gateLoginPin.value = "";
+  });
+}
+
+[gateLoginInitials, gateLoginPin].forEach(input => {
+  input?.addEventListener("keydown", (e) => {
+    if(e.key === "Enter"){
+      e.preventDefault();
+      btnGateLogin?.click();
+    }
+  });
+  input?.addEventListener("input", () => setGateError(""));
 });
 
 
@@ -2144,7 +2267,7 @@ const btnAdminCreateUser = document.getElementById("btnAdminCreateUser");
 if(btnAdminCreateUser){
   btnAdminCreateUser.addEventListener("click", async () => {
     const user = getCurrentUser();
-    if(!user || user.role !== "admin"){
+    if(!user || !canManageUsers(user)){
       alert("Kun admin kan oprette brugere.");
       return;
     }
@@ -2154,11 +2277,11 @@ if(btnAdminCreateUser){
     const pin = prompt("PIN (4-8 cifre) til brugeren:", "")?.trim();
     if(!pin) return;
 
-    const role = (prompt("Role (user/admin):", "user") || "user").trim().toLowerCase() === "admin" ? "admin" : "user";
+    const role = normalizeRole(prompt("Rolle (user/semi-admin/admin):", "user") || "user");
 
     try{
       await cloudCreateUser(initials, pin, role);
-      alert(`Bruger ${initials} oprettet/opdateret (${role}).`);
+      alert(`Bruger ${initials} oprettet/opdateret (${roleLabel(role)}).`);
     }catch(err){
       alert("Kunne ikke oprette bruger: " + (err?.message ?? err));
     }
@@ -2229,10 +2352,13 @@ if(suffixSeriesEl){
 
 
 // ---------- Buttons ----------
-el("btnNew").addEventListener("click", clearForm);
+el("btnNew").addEventListener("click", () => {
+  if(!requireAllocator("Du skal have semi-admin eller admin adgang for at oprette en ny post.")) return;
+  clearForm();
+});
 
 el("btnSave").addEventListener("click", async () => {
-  const user = requireLogin("Du skal være logget ind for at kunne gemme (så vi kan logge initialer).");
+  const user = requireAllocator("Du skal have semi-admin eller admin adgang for at kunne gemme/udtage numre.");
   if(!user) return;
 
   const v = validateSingleMainNumber(fields.main.value);
@@ -2896,7 +3022,7 @@ if(btnPrintSelected){
 searchEl.addEventListener("input", renderRecordList);
 
 // Initialize
-(function init(){
+(async function init(){
   // Label UI depending on mode
   const btnSave = el("btnSave");
   const btnLoad = el("btnLoad");
@@ -2910,7 +3036,7 @@ searchEl.addEventListener("input", renderRecordList);
     if(hint){
       hint.innerHTML = `
         <div><strong>Cloud-mode:</strong> Poster gemmes i D1 (fælles for alle brugere).</div>
-        <div>Log ind for at se og redigere poster.</div>
+        <div>Log ind for at søge/se poster. Semi-admin eller admin kan udtage numre.</div>
       `;
     }
   }else{
@@ -2927,7 +3053,17 @@ searchEl.addEventListener("input", renderRecordList);
   refreshPidOptionsFromField();
 
   if(USE_CLOUD && getCurrentUser()){
-    refreshRecords().catch(() => renderRecordList());
+    try{
+      const me = await cloudMe();
+      setAuth({ token: getToken(), user: { initials: me.initials, role: me.role } });
+      await refreshRecords();
+    }catch(err){
+      if(/Unauthorized|Forbidden|Unknown user/i.test(err?.message || "")){
+        clearAuth();
+        recordsCache = [];
+      }
+      renderRecordList();
+    }
   }else{
     renderRecordList();
   }
