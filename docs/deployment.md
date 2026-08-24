@@ -13,6 +13,35 @@ The app has two deployed parts:
 
 The frontend is static. The backend owns authentication and shared data.
 
+For production planning, read this deployment guide together with:
+
+- [Production Readiness Roadmap](production-readiness.md)
+- [Security and Access Model](security.md)
+- [Production Data Model Proposal](data-model.md)
+
+## Environment Strategy
+
+Production should not share database, secrets, or access policy with development.
+
+Recommended environments:
+
+| Environment | Frontend | Worker | Database | Purpose |
+| --- | --- | --- | --- | --- |
+| `dev` | local or dev URL | dev Worker | dev D1 | active development |
+| `test` | staging URL | test Worker | test D1 | migration rehearsal and user acceptance |
+| `prod` | production URL | prod Worker | prod D1 | real daily use |
+
+Each environment should have separate:
+
+- `wrangler.toml` config or Wrangler environment block
+- D1 database binding
+- `TOKEN_SECRET`
+- `ALLOWED_ORIGINS`
+- Cloudflare Access application and policy
+- backup/export routine
+
+Avoid connecting local development directly to the production D1 database.
+
 ## Local Frontend
 
 From the repository root:
@@ -162,6 +191,8 @@ TOKEN_TTL_SECONDS = "604800"
 
 `TOKEN_TTL_SECONDS` controls bearer-token lifetime.
 
+Production should use environment-specific values. Do not keep localhost origins in the production allowlist unless there is a deliberate support process that requires it.
+
 ## First Admin User
 
 The UI can manage users only after the first admin exists.
@@ -187,6 +218,8 @@ Prototype/demo users commonly used during testing:
 | `NJ` | `1234` | `admin` |
 
 Do not use these defaults for a real production rollout.
+
+For production, prefer Microsoft Entra ID / Cloudflare Access instead of local demo users. See [Security and Access Model](security.md).
 
 ## Verification Checklist
 
@@ -219,14 +252,36 @@ Health check:
 curl https://komponent-blanket-backend.nicklas-jensen-n.workers.dev/health
 ```
 
-## Recommended Production Hardening
+## Production Deployment Checklist
 
-Before production use:
+Before real production use:
 
-- Add Cloudflare WAF/rate limiting for `POST /auth/login`.
-- Replace local passwords with Microsoft Entra ID / SSO if possible.
-- Add CI for syntax checks, smoke tests, and Worker deployment.
-- Create environment-specific Worker configs.
-- Add backup/export routines for D1.
-- Add a proper migration pipeline from Access.
-- Add structured monitoring and alerting.
+- [ ] `dev`, `test`, and `prod` environments are separated.
+- [ ] Production `ALLOWED_ORIGINS` only contains approved production frontend URLs.
+- [ ] Production `TOKEN_SECRET` is unique and stored only as a Cloudflare secret.
+- [ ] Cloudflare Access protects the production frontend/API.
+- [ ] Microsoft Entra ID groups or app roles map to `VIEW`, `PLAN`, and `ADMIN`.
+- [ ] Cloudflare WAF/rate limiting is configured for login and relevant API routes.
+- [ ] Demo users/passwords are removed from production.
+- [ ] D1 export/restore has been tested.
+- [ ] Access migration has been dry-run in `test`.
+- [ ] Smoke tests pass against the production URL after deployment.
+- [ ] Rollback steps are documented before importing production data.
+
+## D1 Backup And Restore Notes
+
+For production backup, do not rely only on the UI **Backup JSON** button. Use database-level export as the main safety layer.
+
+Example D1 export:
+
+```bash
+npx wrangler d1 export komponent_db --remote --output=./komponent_db.sql
+```
+
+Example restore/import into another database:
+
+```bash
+npx wrangler d1 execute komponent_db_test --remote --file=./komponent_db.sql
+```
+
+Use a tested restore procedure before large imports or migration work. Cloudflare also documents D1 Time Travel/backups; check the current Cloudflare account/database support before relying on a retention window.

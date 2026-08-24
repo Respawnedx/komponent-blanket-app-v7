@@ -50,8 +50,11 @@ The frontend API URL is configured in `index.html` through `window.COMPONENT_APP
 ├── docs/
 │   ├── architecture.md         # Main programmer guide
 │   ├── deployment.md           # GitHub Pages + Cloudflare setup/runbook
+│   ├── production-readiness.md # Roadmap from prototype to production
+│   ├── security.md             # Enterprise auth, roles, WAF, audit, secrets
+│   ├── data-model.md           # Recommended production database model
 │   ├── import-formats.md       # Access/Excel/CSV and JSON backup formats
-│   └── review-notes.md         # Review findings, cleanup, and known gaps
+│   └── review-notes.md         # Current review status and handover notes
 └── backend/
     ├── README.md               # Worker-specific setup notes
     ├── bootstrap-admin.js      # Generates first-admin SQL
@@ -69,9 +72,12 @@ The frontend API URL is configured in `index.html` through `window.COMPONENT_APP
 Start here if you are a developer taking over the project:
 
 - [Architecture Guide](docs/architecture.md)
+- [Production Readiness Roadmap](docs/production-readiness.md)
+- [Security and Access Model](docs/security.md)
+- [Production Data Model Proposal](docs/data-model.md)
 - [Deployment Guide](docs/deployment.md)
 - [Import and Backup Formats](docs/import-formats.md)
-- [Review Notes and Known Gaps](docs/review-notes.md)
+- [Review Notes](docs/review-notes.md)
 - [Backend README](backend/README.md)
 
 ## Access Levels
@@ -159,13 +165,7 @@ Implemented in the prototype:
 - Backend rejects duplicate main component numbers.
 - CORS is controlled by `ALLOWED_ORIGINS`.
 
-Production work still needed:
-
-- Real password reset with one-time tokens and approved email sending.
-- Microsoft Entra ID / SSO if the app becomes an internal enterprise system.
-- Cloudflare WAF/rate limiting in front of `/auth/login`.
-- Proper CI tests and deployment automation.
-- Split the large `app.js` into modules.
+For a production rollout, the recommended direction is Microsoft Entra ID / Cloudflare Access, group-based roles, Cloudflare WAF/rate limiting, environment-specific secrets, and operational backup/restore runbooks. See [Security and Access Model](docs/security.md) and [Production Readiness Roadmap](docs/production-readiness.md).
 
 ## Import and Backup
 
@@ -178,6 +178,6 @@ The current tag-list import is intentionally narrow: it imports tag numbers and 
 
 See [Import and Backup Formats](docs/import-formats.md) for exact examples and migration notes.
 
-## Current Prototype Status
+## Current Project Status
 
-This project is a serious functional prototype, not a final production system. It is good for demonstrating desired workflows and data behavior to future developers, but the next phase should include a proper application architecture, database model, CI/CD, formal access management, and a full Access migration design.
+This project is a serious functional prototype and product specification for the future Komponentdatabase. It demonstrates the desired workflows, role behavior, audit expectations, import direction, and number-availability logic. The next phase should treat this repository as the reference for business rules and use the production roadmap to build the long-term system.

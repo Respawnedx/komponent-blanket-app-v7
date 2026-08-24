@@ -2,6 +2,12 @@
 
 This backend stores shared component records, handles initials/email + password login, manages users, and writes audit events.
 
+For production planning, also read:
+
+- [`../docs/production-readiness.md`](../docs/production-readiness.md)
+- [`../docs/security.md`](../docs/security.md)
+- [`../docs/data-model.md`](../docs/data-model.md)
+
 ## Access Levels
 
 - `user`: read-only access for searching, viewing, printing, and exporting existing records.
@@ -68,6 +74,8 @@ TOKEN_TTL_SECONDS = "604800"
 ```
 
 Keep `ALLOWED_ORIGINS` explicit. The Worker does not allow arbitrary browser origins when this variable is empty.
+
+Production should use separate Worker environments or separate Worker services for `dev`, `test`, and `prod`, each with its own D1 database and secrets.
 
 ## Deploy
 
@@ -136,6 +144,8 @@ This is application-level brute-force protection. For production, also add a Clo
 
 Cloudflare WAF/Rate Limiting should be the outer layer for request floods and credential stuffing. The Worker throttling is the inner layer that still protects the API if traffic reaches the Worker.
 
+If production moves to Cloudflare Access + Microsoft Entra ID, the local `/auth/login` route should become development-only or be removed from the production frontend flow.
+
 ### Admin Users
 
 - `GET /admin/users`
@@ -193,4 +203,4 @@ Writing audit rows through `POST /audit` requires `allocator` or `admin`.
 - Every protected route verifies the token and checks that the user still exists and is not disabled.
 - Failed login throttling uses hashed login/IP keys so raw IP addresses are not stored in the throttle table.
 - CORS is controlled by `ALLOWED_ORIGINS`; add local development origins there when testing.
-- The current password reset UI is a prototype mail link to an administrator. A production reset flow should use one-time tokens and an approved email provider.
+- The current password reset UI is a prototype mail link to an administrator. Production should preferably use Entra/Cloudflare Access so the app does not own password reset. If local passwords remain, use one-time reset tokens and an approved email provider.

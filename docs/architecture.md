@@ -2,6 +2,12 @@
 
 This guide explains how the Komponentdatabase prototype is structured and how the main code paths work. It is written for a developer who needs to understand the existing prototype before rebuilding, extending, or replacing it.
 
+For the recommended production direction, read:
+
+- [Production Readiness Roadmap](production-readiness.md)
+- [Security and Access Model](security.md)
+- [Production Data Model Proposal](data-model.md)
+
 ## High-Level Architecture
 
 The project has two runtime layers:
@@ -447,15 +453,12 @@ Recommended production additions:
 - Structured server-side logs/monitoring.
 - CI security checks.
 
-## Important Prototype Tradeoffs
+## Production Transition Notes
 
-The prototype was intentionally kept dependency-light and static-hostable. That makes it easy to deploy and show, but it creates tradeoffs:
+The prototype was intentionally kept dependency-light and static-hostable. That makes it easy to deploy and show. For production, the main transition should be:
 
-- `app.js` is too large for long-term maintenance.
-- There is no framework-level state management.
-- There is no automated unit-test suite.
-- The old Access migration is not fully modeled yet.
-- The data model stores the full record as JSON payload rather than a normalized relational schema.
-- The scan feature is heuristic.
-
-These tradeoffs are acceptable for demonstrating workflows, but a production rewrite should split concerns more cleanly.
+- move authentication to Microsoft Entra ID / Cloudflare Access
+- split frontend concerns into modules or a typed frontend app
+- normalize records, PID references, setup numbers, and status events
+- build a full Access migration with dry-run validation
+- keep the current UI/business rules as the reference behavior
