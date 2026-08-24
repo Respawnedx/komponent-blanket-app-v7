@@ -1,6 +1,6 @@
 # Komponent Blanket App
 
-A browser-based component form for marking component setup numbers, saving records, exporting Excel/JSON files, printing filled forms, and optionally sharing records through a Cloudflare Workers + D1 backend.
+A browser-based prototype for managing component setup numbers, preventing double numbering, reserving numbers for projects, saving revision history, exporting Excel/JSON files, printing filled forms, and optionally sharing records through a Cloudflare Workers + D1 backend.
 
 The user interface is written in plain HTML, CSS, and JavaScript. It can run as a static site, or it can connect to the Worker API configured in `index.html`.
 
@@ -29,8 +29,8 @@ The user interface is written in plain HTML, CSS, and JavaScript. It can run as 
 `app.js` owns the application state:
 
 - `activeId` tracks the currently loaded record.
-- `codeSource` stores whether each selected setup code came from manual input or scan import.
-- `codeMeta` stores metadata per selected code, including mark color, user initials, timestamp, PID, and source.
+- `codeSource` stores whether each selected setup code came from manual input or scan/import.
+- `codeMeta` stores metadata per selected code, including status, user initials, timestamp, PID, and source.
 - `selectedRecordIds` stores sidebar multi-selection for bulk Excel export and printing.
 - `changeBuffer` temporarily tracks unsaved checkbox and metadata changes before a revision is saved.
 
@@ -48,7 +48,16 @@ Internally, the app stores codes as strings:
 - `01` through `99` for the `0xx` series.
 - `101` through `999` for the other series.
 
-When a checkbox is selected, the app records who changed it, when it changed, what mark color was used, and which PID was active if multiple PID numbers are present.
+When a checkbox is selected, the app records who changed it, when it changed, which number status was used, and which PID was active if multiple PID numbers are present.
+
+The prototype treats number state as business status, not just a color:
+
+- `I brug` / blue: an existing active number that blocks reuse.
+- `Projekt` / orange: a temporary project reservation that also blocks reuse until the project is finished or cancelled.
+- `Frigivet` / red: a released or removed number used to document renumbering history; it does not block availability.
+- `Scan/import` / green source marker: the number came from paper scan or Access/Excel import. This is a source marker layered on top of the status.
+
+The availability panel shows free numbers in the active series and suggests suffix rows that are free across `0xx` through `9xx`. This helps preserve complete matrix-style number rows such as `1202.110`, `1202.210`, and so on.
 
 ## Records and Revisions
 
@@ -61,11 +70,11 @@ The app supports:
 - JSON import/export for backup and transfer.
 - Excel export for the active record.
 - Excel export for selected sidebar records.
-- Excel tag import from `.xls` or `.xlsx`.
+- Access/Excel/CSV tag import from `.xls`, `.xlsx`, or `.csv`.
 - Browser print/PDF for the active form or selected records.
 - OCR/image scan import for detecting marked checkboxes from a scanned form.
 
-Excel support is loaded from the SheetJS CDN in `index.html`.
+Excel/CSV support is loaded from the SheetJS CDN in `index.html`. For Microsoft Access migration, the intended prototype path is to export an Access table or query to Excel/CSV with one row per tag/allocation, then import that file into this app.
 
 ## Running Locally
 

@@ -17,21 +17,28 @@
       </div>
     </div>
     <div class="topbar__actions">
+      <div class="topbar__sync" aria-label="Cloud status">
+        <span class="topbar__syncDot"></span>
+        <span id="syncBadge">Cloud klar</span>
+      </div>
       <div class="topbar__group topbar__group--session">
-        <button id="btnLogin" class="btn">Login</button>
+        <span class="topbar__groupLabel">Bruger</span>
         <span id="userBadge" class="userBadge">—</span>
-        <button id="btnAdminCreateUser" class="btn" style="display:none">Admin: Opret bruger</button>
+        <button id="btnLogin" class="btn">Login</button>
+        <button id="btnAdminCreateUser" class="btn" style="display:none">Brugere</button>
       </div>
       <div class="topbar__group">
+        <span class="topbar__groupLabel">Post</span>
         <button id="btnNew" class="btn">Ny</button>
-        <button id="btnSave" class="btn btn--primary">Gem lokalt</button>
-        <button id="btnLoad" class="btn">Hent lokalt</button>
+        <button id="btnSave" class="btn btn--primary">Gem ændringer</button>
+        <button id="btnLoad" class="btn">Opdater data</button>
       </div>
       <div class="topbar__group">
-        <button id="btnOCR" class="btn">OCR scan</button>
+        <span class="topbar__groupLabel">Data</span>
+        <button id="btnOCR" class="btn">Scan papir</button>
         <button id="btnPrint" class="btn">Print / PDF</button>
-        <button id="btnImport" class="btn">Importér JSON</button>
-        <button id="btnExport" class="btn">Eksportér JSON</button>
+        <button id="btnImport" class="btn">Importér data</button>
+        <button id="btnExport" class="btn">Backup JSON</button>
         <button id="btnExportExcel" class="btn">Eksportér Excel</button>
       </div>
     </div>
@@ -103,14 +110,14 @@
             <button id="btnPrintSelected" class="btn btn--sm" type="button">Print (valgte)</button>
           </div>
 <div class="listTools__row">
-            <button id="btnImportExcelTags" class="btn btn--sm" type="button">Importér Excel (.xls)</button>
+            <button id="btnImportExcelTags" class="btn btn--sm" type="button">Importér Access/Excel</button>
           </div>
         </div>
 
         <div id="recordList" class="recordList"></div>
         <div class="hint">
-          <div><strong>Tip:</strong> Gemte poster ligger i din browsers localStorage.</div>
-          <div>Hvis du vil dele data, brug <em>Eksportér JSON</em>.</div>
+          <div><strong>Tip:</strong> Søg på hovednummer, PID eller fuldt tag.</div>
+          <div>Viewer kan se. Semi-admin/admin kan reservere og ændre numre.</div>
         </div>
       </div>
     </aside>
@@ -248,18 +255,20 @@
       <div class="statusbar">
         <div class="statusbar__left">
           <div class="legend">
-            <span class="legend__item"><span class="swatch swatch--blue"></span>Blå</span>
-            <span class="legend__item"><span class="swatch swatch--red"></span>Rød</span>
-            <span class="legend__item"><span class="swatch swatch--scan"></span>Fra scan (grøn)</span>
+            <span class="legend__item"><span class="swatch swatch--blue"></span>I brug</span>
+            <span class="legend__item"><span class="swatch swatch--reserved"></span>Projekt</span>
+            <span class="legend__item"><span class="swatch swatch--red"></span>Frigivet</span>
+            <span class="legend__item"><span class="swatch swatch--scan"></span>Scan/import</span>
           </div>
 
           <div class="controlBox" aria-label="Valg (markér/serie/PID/vis)">
           <div class="toolbar">
             <div class="toolgroup" id="markToolgroup">
-              <span class="toolLabel">Markér:</span>
+              <span class="toolLabel">Status:</span>
               <div class="seg" id="markSeg">
-                <button class="segBtn segBtn--active" data-mark="blue" type="button">Blå</button>
-                <button class="segBtn" data-mark="red" type="button">Rød</button>
+                <button class="segBtn segBtn--active" data-mark="blue" type="button">I brug</button>
+                <button class="segBtn" data-mark="reserved" type="button">Projekt</button>
+                <button class="segBtn" data-mark="red" type="button">Frigivet</button>
               </div>
             </div>
 
@@ -288,8 +297,9 @@
               <span class="toolLabel">Vis:</span>
               <div class="seg" id="filterSeg">
                 <button class="segBtn segBtn--active" data-filter="all" type="button">Alle</button>
-                <button class="segBtn" data-filter="blue" type="button">Blå</button>
-                <button class="segBtn" data-filter="red" type="button">Rød</button>
+                <button class="segBtn" data-filter="blue" type="button">I brug</button>
+                <button class="segBtn" data-filter="reserved" type="button">Projekt</button>
+                <button class="segBtn" data-filter="red" type="button">Frigivet</button>
                 <button class="segBtn" data-filter="scan" type="button">Scan</button>
               </div>
             </div>
@@ -302,13 +312,18 @@
               <div class="muted availTitle">Ledige numre (denne serie): <span id="availCount">—</span></div>
               <div id="availableCodes" class="availPills" aria-label="Ledige numre">—</div>
 
+              <div class="matrixBox" aria-label="Ledige matrix-rækker">
+                <div class="muted suffixTitle">Bedste ledige suffix-rækker på tværs af serier</div>
+                <div id="matrixCandidates" class="matrixCandidates" aria-label="Ledige suffix-rækker">—</div>
+              </div>
+
               <div class="suffixBox" aria-label="Overblik på tværs af serier">
-                <div class="muted suffixTitle">Tjek suffix (01–99) på tværs af serier</div>
+                <div class="muted suffixTitle">Tjek suffix (01–99) i hele serien</div>
                 <div class="suffixRow">
                   <input id="suffixInput" class="suffixInput" inputmode="numeric" maxlength="2" placeholder="06" aria-label="Suffix" />
                   <div id="suffixSeries" class="suffixSeries" aria-label="Serie-overblik">—</div>
                 </div>
-                <div class="muted suffixLegend">Grøn = ledig · Grå = optaget · Farvet prik = valgt i denne post</div>
+                <div class="muted suffixLegend">Grøn = ledig · Orange = projekt · Grå = optaget · Farvet prik = valgt i denne post</div>
               </div>
             </div>
           </div>
@@ -324,7 +339,7 @@
   </main>
 
   <input id="importFile" type="file" accept="application/json" style="display:none" />
-  <input id="excelTagsFile" type="file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" />
+  <input id="excelTagsFile" type="file" accept=".xls,.xlsx,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" style="display:none" />
   <input id="scanFile" type="file" accept="image/*" style="display:none" />
 
   <div id="loginModal" class="modal" aria-hidden="true">

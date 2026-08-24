@@ -23,6 +23,7 @@ const fields = {
 const selectedCodesEl = el("selectedCodes");
 const availableCodesEl = el("availableCodes");
 const availCountEl = el("availCount");
+const matrixCandidatesEl = el("matrixCandidates");
 const suffixInputEl = el("suffixInput");
 const suffixSeriesEl = el("suffixSeries");
 const recordListEl = el("recordList");
@@ -77,10 +78,10 @@ function compressRanges(nums){
 }
 
 
-// ---------- Markering (blå/rød) + Serie (0xx..9xx) ----------
-let currentMark = "blue";   // "blue" | "red"
+// ---------- Nummerstatus + Serie (0xx..9xx) ----------
+let currentMark = "blue";   // "blue" | "reserved" | "red"
 let currentSeries = 0;      // 0..9 (0xx, 1xx, ...)
-let currentFilter = "all"; // "all" | "blue" | "red" | "scan"
+let currentFilter = "all"; // "all" | "blue" | "reserved" | "red" | "scan"
 
 // Suffix-overblik (01-99) på tværs af serier
 let currentSuffix = null; // number 1..99
@@ -296,17 +297,59 @@ function normalizeMainKey(mainRaw){
   return stripLeadingZeros(parseMainNumber(mainRaw));
 }
 
-function markSymbol(mark){
-  if(mark === "red") return "🔴";
-  if(mark === "scan") return "🟩";
+const TAG_STATUS = {
+  ACTIVE: "blue",
+  RESERVED: "reserved",
+  RELEASED: "red",
+};
+
+function normalizeTagStatus(mark){
+  const raw = String(mark || TAG_STATUS.ACTIVE).trim().toLowerCase();
+  if(raw === TAG_STATUS.RESERVED || raw === "project" || raw === "temporary") return TAG_STATUS.RESERVED;
+  if(raw === TAG_STATUS.RELEASED || raw === "free" || raw === "removed") return TAG_STATUS.RELEASED;
+  // Legacy green scan marks are treated as active tags with scan/import as source.
+  return TAG_STATUS.ACTIVE;
+}
+
+function tagStatusLabel(mark){
+  const status = normalizeTagStatus(mark);
+  if(status === TAG_STATUS.RESERVED) return "Projekt";
+  if(status === TAG_STATUS.RELEASED) return "Frigivet";
+  return "I brug";
+}
+
+function tagStatusSymbol(mark){
+  const status = normalizeTagStatus(mark);
+  if(status === TAG_STATUS.RESERVED) return "🟠";
+  if(status === TAG_STATUS.RELEASED) return "🔴";
   return "🔵";
 }
 
+function isBlockingStatus(mark){
+  const status = normalizeTagStatus(mark);
+  return status === TAG_STATUS.ACTIVE || status === TAG_STATUS.RESERVED;
+}
+
+function isScanSourceValue(source, mark){
+  return source === "scan" || mark === "scan";
+}
+
+function markSymbol(mark){
+  return tagStatusSymbol(mark);
+}
+
 function getRecMark(rec, code){
-  if(!rec) return "blue";
+  if(!rec) return TAG_STATUS.ACTIVE;
   const src = rec.codeSources || {};
   const meta = rec.codeMeta || {};
-  return meta?.[code]?.mark || (src?.[code] === "scan" ? "scan" : "blue");
+  return normalizeTagStatus(meta?.[code]?.mark || TAG_STATUS.ACTIVE);
+}
+
+function isRecScanSource(rec, code){
+  if(!rec) return false;
+  const src = rec.codeSources || {};
+  const meta = rec.codeMeta || {};
+  return isScanSourceValue(src?.[code], meta?.[code]?.source || meta?.[code]?.mark);
 }
 
 function getRecPid(rec, code){
@@ -384,11 +427,17 @@ function computeTagChanges(prevRec, currRec){
 function getMarkForCode(code){
   const src = codeSource[code] || "manual";
   const meta = codeMeta?.[code] || {};
-  return meta.mark || (src === "scan" ? "scan" : "blue");
+  return normalizeTagStatus(meta.mark || TAG_STATUS.ACTIVE);
+}
+
+function isScanSourceForCode(code){
+  const src = codeSource[code] || "manual";
+  const meta = codeMeta?.[code] || {};
+  return isScanSourceValue(src, meta.source || meta.mark);
 }
 
 function setMarkMode(mark){
-  currentMark = (mark === "red") ? "red" : "blue";
+  currentMark = normalizeTagStatus(mark);
   const seg = document.getElementById("markSeg");
   if(seg){
     seg.querySelectorAll(".segBtn").forEach(btn => {
@@ -418,7 +467,7 @@ function setSeries(series){
 
 function setFilterMode(filter){
   const f = String(filter || "all");
-  const allowed = new Set(["all","blue","red","scan"]);
+  const allowed = new Set(["all","blue","reserved","red","scan"]);
   currentFilter = allowed.has(f) ? f : "all";
 
   const seg = document.getElementById("filterSeg");
@@ -585,24 +634,37 @@ function updateAuthGate(){
   document.body.classList.toggle("is-authenticated", !!user);
 }
 
+function updateSyncBadge(message){
+  const badge = document.getElementById("syncBadge");
+  if(!badge) return;
+  if(message){
+    badge.textContent = message;
+    return;
+  }
+  const user = getCurrentUser();
+  badge.textContent = USE_CLOUD ? (user ? "Cloud synkroniseret" : "Login kræves") : "Lokal demo";
+}
+
 function updateUserBadge(){
   const badge = document.getElementById("userBadge");
+  const loginBtn = document.getElementById("btnLogin");
   const user = getCurrentUser();
   updateAuthGate();
+  updateSyncBadge();
   if(!badge) return;
 
-  const mode = USE_CLOUD ? "cloud" : "lokal";
-
   if(!user){
-    badge.textContent = `Ikke logget ind (${mode})`;
+    badge.textContent = `Ikke logget ind`;
     badge.style.color = "var(--muted)";
+    if(loginBtn) loginBtn.textContent = "Login";
     setEditingEnabled(false);
     updateAdminUi();
     return;
   }
 
-  badge.textContent = `${user.initials} (${roleLabel(user.role)}) (${mode})`;
-  badge.style.color = "#111";
+  badge.textContent = `${user.initials} · ${roleLabel(user.role)}`;
+  badge.style.color = "var(--accent-strong)";
+  if(loginBtn) loginBtn.textContent = "Log ud";
   setEditingEnabled(canAllocateNumbers(user));
   updateAdminUi();
 }
@@ -657,16 +719,17 @@ function summarizeSources(rec){
 
 
 function summarizeMarks(rec){
-  let blue = 0, red = 0, scan = 0;
+  let blue = 0, reserved = 0, red = 0, scan = 0;
   const sources = rec.codeSources || {};
   const meta = rec.codeMeta || {};
   (rec.selectedCodes || []).forEach(code => {
-    const mark = (meta?.[code]?.mark) || ((sources[code] === "scan") ? "scan" : "blue");
-    if(mark === "red") red++;
-    else if(mark === "scan") scan++;
+    const mark = normalizeTagStatus(meta?.[code]?.mark || TAG_STATUS.ACTIVE);
+    if(mark === TAG_STATUS.RELEASED) red++;
+    else if(mark === TAG_STATUS.RESERVED) reserved++;
     else blue++;
+    if(isScanSourceValue(sources?.[code], meta?.[code]?.source || meta?.[code]?.mark)) scan++;
   });
-  return {blue, red, scan};
+  return {blue, reserved, red, scan};
 }
 
 
@@ -770,6 +833,20 @@ function buildGrid(gridEl){
           pidColor: (pidOptions.length > 1) ? (currentPidIdx % 4) : 0,
         };
         changeBuffer.push({ at: now, by: user.initials, action: "CHECK", code: codeKey, source: "manual", mark: currentMark });
+      }else if(codeSource[codeKey] && getMarkForCode(codeKey) !== currentMark){
+        cb.checked = true;
+        const prev = codeMeta[codeKey] || {};
+        codeSource[codeKey] = prev.source === "scan" ? "scan" : "manual";
+        codeMeta[codeKey] = {
+          ...prev,
+          by: user.initials,
+          at: now,
+          mark: currentMark,
+          pid: prev.pid ?? getCurrentPidValue(),
+          pidIdx: Number.isFinite(parseInt(prev.pidIdx,10)) ? parseInt(prev.pidIdx,10) : currentPidIdx,
+          pidColor: prev.pidColor ?? ((pidOptions.length > 1) ? (currentPidIdx % 4) : 0),
+        };
+        changeBuffer.push({ at: now, by: user.initials, action: "STATUS_CHANGE", code: codeKey, source: codeSource[codeKey], mark: currentMark });
       }else{
         delete codeSource[codeKey];
         delete codeMeta[codeKey];
@@ -823,7 +900,7 @@ function setSelectedCodes(codes, source="manual", mark=null){
   for(const code of set){
     codeSource[code] = source;
     const prev = codeMeta[code] || {};
-    const m = (source === "scan") ? "scan" : (mark || prev.mark || "blue");
+    const m = normalizeTagStatus(mark || prev.mark || TAG_STATUS.ACTIVE);
     codeMeta[code] = {
       ...prev,
       source,
@@ -847,7 +924,10 @@ function updateSelectedCodes(){
   const allCodes = getSelectedCodes();
   const codes = (currentFilter === "all")
     ? allCodes
-    : allCodes.filter(code => getMarkForCode(code) === currentFilter);
+    : allCodes.filter(code => {
+      if(currentFilter === "scan") return isScanSourceForCode(code);
+      return getMarkForCode(code) === currentFilter;
+    });
 
   if(!allCodes.length){
     selectedCodesEl.textContent = "—";
@@ -861,7 +941,8 @@ function updateSelectedCodes(){
       const label = formatOpsaetning(code);
       const pidAttr = (pidOptions.length > 1) ? ` data-pid="${pidColor}"` : "";
       const pidDot = (pidOptions.length > 1) ? `<span class="pillPidDot"></span>` : "";
-      return `<span class="pill" data-mark="${mark}"${pidAttr}><span class="pillDot"></span>${pidDot}${label}</span>`;
+      const sourceDot = isScanSourceForCode(code) ? `<span class="pillSourceDot" title="Scan/import"></span>` : "";
+      return `<span class="pill" data-mark="${mark}"${pidAttr}><span class="pillDot"></span>${pidDot}${sourceDot}${label}</span>`;
     }).join("");
 
     selectedCodesEl.innerHTML = `<span class="codePills">${pills}</span>`;
@@ -877,9 +958,11 @@ function updateSelectedCodes(){
     if(isSel){
       const src = codeSource[code] || "manual";
       const meta = codeMeta?.[code] || {};
-      const mark = meta.mark || (src === "scan" ? "scan" : "blue");
+      const mark = normalizeTagStatus(meta.mark || TAG_STATUS.ACTIVE);
 
       cb.dataset.mark = mark;
+      if(isScanSourceForCode(code)) cb.dataset.source = "scan";
+      else delete cb.dataset.source;
 
       // PID (kun hvis flere PID-numre)
       if(pidOptions.length > 1){
@@ -890,13 +973,15 @@ function updateSelectedCodes(){
       }
 
       // Filter: dim selected checkboxes that don't match
-      if(currentFilter !== "all" && mark !== currentFilter) cb.dataset.dim = "1";
+      if(currentFilter === "scan" && !isScanSourceForCode(code)) cb.dataset.dim = "1";
+      else if(currentFilter !== "all" && currentFilter !== "scan" && mark !== currentFilter) cb.dataset.dim = "1";
       else delete cb.dataset.dim;
 
       if(meta?.by){
         const when = meta.at ? new Date(meta.at).toLocaleString() : "";
         const pidTxt = (meta.pid && pidOptions.length > 1) ? ` — PID ${meta.pid}` : "";
-        cb.title = `${meta.by}${when ? " — " + when : ""}${meta.source ? " (" + meta.source + ")" : ""}${meta.mark ? " — " + meta.mark : ""}${pidTxt}`;
+        const sourceTxt = isScanSourceForCode(code) ? "scan/import" : "manuel";
+        cb.title = `${meta.by}${when ? " — " + when : ""} (${sourceTxt}) — ${tagStatusLabel(mark)}${pidTxt}`;
       }else{
         cb.removeAttribute("title");
       }
@@ -904,6 +989,7 @@ function updateSelectedCodes(){
       delete cb.dataset.mark;
       delete cb.dataset.dim;
       delete cb.dataset.pid;
+      delete cb.dataset.source;
       cb.removeAttribute("title");
     }
   });
@@ -911,16 +997,22 @@ function updateSelectedCodes(){
   updateAvailabilityDisplay();
 }
 
-function getUsedCodesInOtherRecords(mainRaw, excludeId){
+function getBlockingCodesInOtherRecords(mainRaw, excludeId){
   const main = stripLeadingZeros(parseMainNumber(mainRaw));
-  if(!main) return new Set();
-  const used = new Set();
+  if(!main) return new Map();
+  const used = new Map();
   for(const r of loadRecords() || []){
     if(!r || !r.hovedkomponentnr) continue;
     if(excludeId && r.id === excludeId) continue;
     const m = stripLeadingZeros(String(r.hovedkomponentnr));
     if(m !== main) continue;
-    (r.selectedCodes || []).forEach(c => used.add(String(c)));
+    (r.selectedCodes || []).forEach(c => {
+      const code = String(c);
+      const status = getRecMark(r, code);
+      if(isBlockingStatus(status) && !used.has(code)){
+        used.set(code, status);
+      }
+    });
   }
   return used;
 }
@@ -933,11 +1025,12 @@ function updateAvailabilityDisplay(){
   if(!main){
     if(availCountEl) availCountEl.textContent = "—";
     availableCodesEl.innerHTML = `<span class="muted">Udfyld hovednr. for at se ledige numre.</span>`;
+    if(matrixCandidatesEl) matrixCandidatesEl.innerHTML = `<span class="muted">Udfyld hovednr. for at se matrix-rækker.</span>`;
     if(suffixSeriesEl) suffixSeriesEl.textContent = "—";
     return;
   }
 
-  const usedOther = getUsedCodesInOtherRecords(mainRaw, activeId);
+  const usedOther = getBlockingCodesInOtherRecords(mainRaw, activeId);
 
   let freeCount = 0;
   let takenCount = 0;
@@ -945,7 +1038,7 @@ function updateAvailabilityDisplay(){
 
   for(let i=1;i<=99;i++){
     const codeKey = codeKeyForSeries(i);
-    const isSel = !!codeSource[codeKey];
+    const isSel = !!codeSource[codeKey] && isBlockingStatus(getMarkForCode(codeKey));
     const isTaken = !isSel && usedOther.has(codeKey);
     if(isTaken) takenCount++;
     if(!isSel && !isTaken){
@@ -970,6 +1063,7 @@ function updateAvailabilityDisplay(){
     availableCodesEl.innerHTML = pills.join("");
   }
 
+  renderMatrixCandidates(mainRaw, usedOther);
   renderSuffixOverview(mainRaw, usedOther);
 }
 
@@ -1001,16 +1095,79 @@ function renderSuffixOverview(mainRaw, usedOther){
   for(let s=0;s<=9;s++){
     const codeKey = codeKeyForExplicitSeries(s, suffix);
     const isSel = !!codeSource[codeKey];
-    const isTaken = !isSel && usedOther.has(codeKey);
-    const state = isSel ? "selected" : (isTaken ? "taken" : "free");
+    const otherStatus = usedOther.get(codeKey);
+    const isTaken = !isSel && !!otherStatus;
+    const state = isSel ? "selected" : (isTaken ? (otherStatus === TAG_STATUS.RESERVED ? "reserved" : "taken") : "free");
     let markAttr = "";
     if(isSel){
       const mark = getMarkForCode(codeKey);
       markAttr = ` data-mark="${mark}"`;
+    }else if(isTaken){
+      markAttr = ` data-mark="${otherStatus}"`;
     }
     pills.push(`<span class="sxPill" data-series="${s}" data-state="${state}"${markAttr}><span class="sxPillDot"></span>${s}xx</span>`);
   }
   suffixSeriesEl.innerHTML = pills.join("");
+}
+
+function renderMatrixCandidates(mainRaw, usedOther){
+  if(!matrixCandidatesEl) return;
+
+  const main = parseMainNumber(mainRaw);
+  if(!main){
+    matrixCandidatesEl.innerHTML = `<span class="muted">Udfyld hovednr. for at se matrix-rækker.</span>`;
+    return;
+  }
+
+  const candidates = [];
+  for(let suffix=1; suffix<=99; suffix++){
+    let free = 0;
+    let reserved = 0;
+    let occupied = 0;
+    let selected = 0;
+
+    for(let s=0; s<=9; s++){
+      const codeKey = codeKeyForExplicitSeries(s, suffix);
+      if(codeSource[codeKey] && isBlockingStatus(getMarkForCode(codeKey))){
+        selected++;
+        if(getMarkForCode(codeKey) === TAG_STATUS.RESERVED) reserved++;
+        else if(isBlockingStatus(getMarkForCode(codeKey))) occupied++;
+        continue;
+      }
+
+      const otherStatus = usedOther.get(codeKey);
+      if(!otherStatus) free++;
+      else if(otherStatus === TAG_STATUS.RESERVED) reserved++;
+      else occupied++;
+    }
+
+    candidates.push({ suffix, free, reserved, occupied, selected });
+  }
+
+  const best = candidates
+    .filter(c => c.free > 0)
+    .sort((a,b) => (b.free - a.free) || (a.occupied - b.occupied) || (a.reserved - b.reserved) || (a.suffix - b.suffix))
+    .slice(0, 8);
+
+  if(!best.length){
+    matrixCandidatesEl.innerHTML = `<span class="muted">Ingen ledige matrix-rækker fundet.</span>`;
+    return;
+  }
+
+  matrixCandidatesEl.innerHTML = best.map(c => {
+    const state = c.occupied === 0 && c.reserved === 0 && c.selected === 0 ? "free" : "mixed";
+    const title = `${pad2(c.suffix)}: ${c.free}/10 ledige, ${c.reserved} projekt, ${c.occupied} optaget`;
+    return `<button class="matrixPill" type="button" data-suffix="${pad2(c.suffix)}" data-state="${state}" title="${title}">${pad2(c.suffix)} <span>${c.free}/10</span></button>`;
+  }).join("");
+
+  matrixCandidatesEl.querySelectorAll(".matrixPill").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const suffix = btn.dataset.suffix;
+      if(suffixInputEl) suffixInputEl.value = suffix;
+      currentSuffix = parseInt(suffix, 10);
+      renderSuffixOverview(mainRaw, usedOther);
+    });
+  });
 }
 
 function applyCheckChange(codeKey, checked, markOverride=null){
@@ -1106,13 +1263,13 @@ function getFormData(){
   for(const code of rec.selectedCodes){
     if(codeMeta[code]){
       const src = (codeSource[code] || codeMeta[code].source || "manual");
-      metaOut[code] = { ...codeMeta[code], source: src, mark: codeMeta[code].mark || (src === "scan" ? "scan" : "blue") };
+      metaOut[code] = { ...codeMeta[code], source: src, mark: normalizeTagStatus(codeMeta[code].mark || TAG_STATUS.ACTIVE) };
     }else{
       metaOut[code] = {
         by: user?.initials ?? "—",
         at: nowIso,
         source: (codeSource[code] || "manual"),
-        mark: (codeSource[code] === "scan") ? "scan" : "blue",
+        mark: TAG_STATUS.ACTIVE,
         pid: getCurrentPidValue(),
         pidIdx: currentPidIdx,
         pidColor: (pidOptions.length > 1) ? (currentPidIdx % 4) : 0,
@@ -1130,6 +1287,7 @@ function getFormData(){
       action: e.action,
       code: e.code,
       source: e.source,
+      status: e.mark ? normalizeTagStatus(e.mark) : null,
     })));
   }
 
@@ -1187,7 +1345,7 @@ function setFormData(rec){
   for(const code of Object.keys(codeSource)){
     const src = codeSource[code] || "manual";
     const prev = metaIn[code] || {};
-    const mark = prev.mark || (src === "scan" ? "scan" : "blue");
+    const mark = normalizeTagStatus(prev.mark || TAG_STATUS.ACTIVE);
 
     const pidIdx = Number.isFinite(parseInt(prev.pidIdx,10)) ? parseInt(prev.pidIdx,10) : 0;
     const pidVal = prev.pid || (pidOptions.length ? pidOptions[0] : null) || null;
@@ -1240,29 +1398,35 @@ async function fetchRecordsCache(){
 }
 
 async function refreshRecords(){
+  updateSyncBadge(USE_CLOUD ? "Opdaterer..." : "Lokal demo");
   if(!USE_CLOUD){
     recordsCache = [];
     renderRecordList();
+    updateSyncBadge();
     return;
   }
   const user = getCurrentUser();
   if(!user){
     recordsCache = [];
     renderRecordList();
+    updateSyncBadge();
     return;
   }
   await fetchRecordsCache();
   renderRecordList();
   updateAvailabilityDisplay();
+  updateSyncBadge("Cloud synkroniseret");
 }
 
 async function upsertRecord(rec){
+  updateSyncBadge(USE_CLOUD ? "Gemmer..." : "Gemmer lokalt...");
   if(!USE_CLOUD){
     const records = loadRecordsLocal();
     const idx = records.findIndex(r => r.id === rec.id);
     if(idx >= 0) records[idx] = rec;
     else records.unshift(rec);
     saveRecordsLocal(records);
+    updateSyncBadge("Gemt lokalt");
     return records;
   }
 
@@ -1276,6 +1440,7 @@ async function upsertRecord(rec){
   if(idx >= 0) recordsCache[idx] = saved;
   else recordsCache.unshift(saved);
 
+  updateSyncBadge("Cloud synkroniseret");
   return recordsCache;
 }
 
@@ -1388,7 +1553,7 @@ function renderRecordList(){
     badge.className = "badge";
     const nSel = (rec.selectedCodes?.length ?? 0);
     const mk = summarizeMarks(rec);
-    badge.textContent = `${nSel} felter (🔵${mk.blue} 🔴${mk.red} 🟩${mk.scan})`;
+    badge.textContent = `${nSel} numre (🔵${mk.blue} 🟠${mk.reserved} 🔴${mk.red} · ${mk.scan} scan)`;
 
     left.appendChild(sel);
     left.appendChild(title);
@@ -1487,7 +1652,15 @@ function escapeHtml(s){
 
 // Import JSON (backup)
 const importFile = document.getElementById("importFile");
-document.getElementById("btnImport").addEventListener("click", () => importFile.click());
+document.getElementById("btnImport").addEventListener("click", () => {
+  const choice = prompt(
+    "Importér data\n\n1 = Access/Excel/CSV tagliste\n2 = JSON backup\n\nSkriv 1 eller 2:",
+    "1"
+  );
+  if(choice === null) return;
+  if(String(choice).trim() === "2") importFile.click();
+  else excelTagsFile.click();
+});
 
 importFile.addEventListener("change", async () => {
   const file = importFile.files?.[0];
@@ -1611,21 +1784,21 @@ async function importTagsFromExcel(file){
     }
 
     if(groups.size === 0){
-      alert("Fandt ingen gyldige tags i Excel-filen.\n\nForventet format: 4390.002 (kolonne 'NR').");
+      alert("Fandt ingen gyldige tags i importfilen.\n\nForventet format: 4390.002 (kolonne 'NR').");
       return;
     }
 
     const totalTags = [...groups.values()].reduce((sum,g) => sum + g.codes.size, 0);
     const ok = confirm(
       `Fandt ${totalTags} tags fordelt på ${groups.size} hovednumre.\n` +
-      `Importerede tags markeres som 'Fra scan (grøn)'.\n\n` +
+      `Importerede tags registreres som 'I brug' med kilde 'Access/Excel'.\n\n` +
       `Vil du oprette/ajourføre posterne nu?`
     );
     if(!ok) return;
 
-    const desc = await requestRevisionDescriptionPrefill("Excel import");
+    const desc = await requestRevisionDescriptionPrefill("Access/Excel import");
     if(desc === null) return;
-    const revDesc = String(desc || "").trim() || "Excel import";
+    const revDesc = String(desc || "").trim() || "Access/Excel import";
 
     const nowIso = new Date().toISOString();
     let created = 0, updated = 0, dupWarnings = 0, addedTotal = 0;
@@ -1668,13 +1841,13 @@ async function importTagsFromExcel(file){
           sel.add(c);
           added.push(c);
 
-          // Markér som scan (grøn)
+          // Access/Excel import is a source, not a separate occupied-number status.
           rec.codeSources[c] = "scan";
           rec.codeMeta[c] = {
             by: user.initials,
             at: nowIso,
             source: "scan",
-            mark: "scan",
+            mark: TAG_STATUS.ACTIVE,
             pid: null,
             pidIdx: 0,
             pidColor: 0,
@@ -1687,7 +1860,7 @@ async function importTagsFromExcel(file){
               by: user.initials,
               at: nowIso,
               source: rec.codeSources[c],
-              mark: (rec.codeSources[c] === "scan") ? "scan" : "blue",
+              mark: TAG_STATUS.ACTIVE,
               pid: null,
               pidIdx: 0,
               pidColor: 0,
@@ -1743,7 +1916,7 @@ async function importTagsFromExcel(file){
     }
 
     const msg =
-      `Excel import færdig.\n` +
+      `Access/Excel import færdig.\n` +
       `Oprettet: ${created}\n` +
       `Opdateret: ${updated}\n` +
       `Tilføjede tags: ${addedTotal}\n` +
@@ -1753,7 +1926,7 @@ async function importTagsFromExcel(file){
     alert(msg);
 
   }catch(err){
-    alert("Kunne ikke importere Excel: " + (err?.message ?? err));
+    alert("Kunne ikke importere datafilen: " + (err?.message ?? err));
   }
 }
 
@@ -1852,7 +2025,7 @@ ctx.drawImage(cropped, 0, 0, cropped.width, cropped.height, dx, dy, dw, dh);
         by: user.initials,
         at: now,
         source: "scan",
-        mark: "scan",
+        mark: TAG_STATUS.ACTIVE,
         pid: getCurrentPidValue(),
         pidIdx: currentPidIdx,
         pidColor: (pidOptions.length > 1) ? (currentPidIdx % 4) : 0,
@@ -2496,8 +2669,9 @@ function exportExcelFromCurrent(){
   const rows = codes.map(code => {
     const meta = codeMeta?.[code] || {};
     const signature = meta?.by || signHeader || "—";
-    const mark = meta.mark || ((codeSource[code] === "scan") ? "scan" : "blue");
-    const markLabel = (mark === "red") ? "🔴 Rød" : (mark === "scan" ? "🟩 Scan" : "🔵 Blå");
+    const mark = normalizeTagStatus(meta.mark || TAG_STATUS.ACTIVE);
+    const statusLabel = `${tagStatusSymbol(mark)} ${tagStatusLabel(mark)}`;
+    const sourceLabel = isScanSourceForCode(code) ? "Scan/import" : "Manuel";
     const ops = formatOpsaetning(code);
     const tag = buildTag(mainRaw, code);
 
@@ -2509,7 +2683,8 @@ function exportExcelFromCurrent(){
       "PID (tag)": String(meta.pid || pid || "").trim(),
       "Signatur": signature,
       "Opsætning": ops,              // 01 / 101 / 201 ...
-      "Markering": markLabel,        // Blå / Rød / Scan
+      "Status": statusLabel,         // I brug / Projekt / Frigivet
+      "Kilde": sourceLabel,          // Manuel / Scan-import
       "Tag": tag,                    // 27.01 / 27.101 ...
       "Revision": revStr,
     };
@@ -2523,7 +2698,8 @@ function exportExcelFromCurrent(){
     "PID (tag)",
     "Signatur",
     "Opsætning",
-    "Markering",
+    "Status",
+    "Kilde",
     "Tag",
     "Revision",
   ];
@@ -2555,7 +2731,8 @@ function exportExcelFromCurrent(){
     { wch: 12 },
     { wch: 12 },
     { wch: 10 },
-    { wch: 10 },
+    { wch: 14 },
+    { wch: 14 },
     { wch: 18 },
     { wch: 44 },
   ];
@@ -2871,8 +3048,9 @@ function rowsFromRecordForExcel(rec){
   return codes.map(code => {
     const meta = metaMap?.[code] || {};
     const src = sources?.[code] || meta.source || "manual";
-    const mark = meta.mark || (src === "scan" ? "scan" : "blue");
-    const markLabel = (mark === "red") ? "🔴 Rød" : (mark === "scan" ? "🟩 Scan" : "🔵 Blå");
+    const mark = normalizeTagStatus(meta.mark || TAG_STATUS.ACTIVE);
+    const statusLabel = `${tagStatusSymbol(mark)} ${tagStatusLabel(mark)}`;
+    const sourceLabel = isScanSourceValue(src, meta.source || meta.mark) ? "Scan/import" : "Manuel";
     const signature = meta.by || signHeader || rec.editedBy || "—";
     const ops = formatOpsaetning(code);
     const tag = buildTag(mainRaw, code);
@@ -2885,7 +3063,8 @@ function rowsFromRecordForExcel(rec){
       "PID (tag)": String(meta.pid || pid || "").trim(),
       "Signatur": signature,
       "Opsætning": ops,
-      "Markering": markLabel,
+      "Status": statusLabel,
+      "Kilde": sourceLabel,
       "Tag": tag,
       "Revision": lastRevisionString(rec) || "",
     };
@@ -2931,7 +3110,8 @@ async function exportExcelFromSelectedRecords(){
     "PID (tag)",
     "Signatur",
     "Opsætning",
-    "Markering",
+    "Status",
+    "Kilde",
     "Tag",
     "Revision",
   ];
@@ -2970,7 +3150,8 @@ async function exportExcelFromSelectedRecords(){
     { wch: 12 },
     { wch: 12 },
     { wch: 10 },
-    { wch: 12 },
+    { wch: 14 },
+    { wch: 14 },
     { wch: 18 },
     { wch: 44 },
   ];
@@ -3030,8 +3211,8 @@ searchEl.addEventListener("input", renderRecordList);
   const hint = document.querySelector(".hint");
 
   if(USE_CLOUD){
-    if(btnSave) btnSave.textContent = "Gem (cloud)";
-    if(btnLoad) btnLoad.textContent = "Hent (cloud)";
+    if(btnSave) btnSave.textContent = "Gem ændringer";
+    if(btnLoad) btnLoad.textContent = "Opdater data";
     if(title) title.textContent = "Poster (cloud)";
     if(hint){
       hint.innerHTML = `
@@ -3040,8 +3221,8 @@ searchEl.addEventListener("input", renderRecordList);
       `;
     }
   }else{
-    if(btnSave) btnSave.textContent = "Gem lokalt";
-    if(btnLoad) btnLoad.textContent = "Hent lokalt";
+    if(btnSave) btnSave.textContent = "Gem ændringer";
+    if(btnLoad) btnLoad.textContent = "Opdater data";
     if(title) title.textContent = "Poster (lokalt)";
   }
 
