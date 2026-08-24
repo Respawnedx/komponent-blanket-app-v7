@@ -2587,13 +2587,62 @@ function closeLogin(){
   loginModal.setAttribute("aria-hidden", "true");
 }
 
+function resetLoginForms(prefill = ""){
+  if(loginInitials) loginInitials.value = prefill;
+  if(loginPin) loginPin.value = "";
+  if(gateLoginInitials) gateLoginInitials.value = prefill;
+  if(gateLoginPin){
+    gateLoginPin.value = "";
+    gateLoginPin.type = "password";
+  }
+  if(btnGateTogglePassword){
+    btnGateTogglePassword.textContent = "Vis";
+    btnGateTogglePassword.setAttribute("aria-pressed", "false");
+  }
+  setGateError("");
+}
+
+function focusMainLogin(){
+  setTimeout(() => {
+    try{
+      (gateLoginInitials?.value ? gateLoginPin : gateLoginInitials)?.focus();
+    }catch{}
+  }, 30);
+}
+
+function performLogout(options = {}){
+  const user = getCurrentUser();
+  if(!user){
+    closeLogin();
+    updateUserBadge();
+    focusMainLogin();
+    return false;
+  }
+
+  if(options.confirmFirst && !confirm(`Log ud som ${user.initials}?`)){
+    return false;
+  }
+
+  const previousInitials = user.initials || "";
+  clearDraft();
+  clearAuth();
+  closeLogin();
+  resetLoginForms(previousInitials);
+
+  // For cloud-mode: tøm cache så listen er neutral indtil næste login
+  if(USE_CLOUD){
+    recordsCache = [];
+    renderRecordList();
+  }
+
+  focusMainLogin();
+  return true;
+}
+
 btnLogin.addEventListener("click", () => {
   const user = getCurrentUser();
-  if(user && confirm(`Log ud som ${user.initials}?`)){
-    clearDraft();
-    clearAuth();
-    // For cloud-mode: tøm cache så listen er neutral indtil næste login
-    if(USE_CLOUD){ recordsCache = []; renderRecordList(); }
+  if(user){
+    performLogout({ confirmFirst: true });
     return;
   }
   openLogin();
@@ -2672,15 +2721,7 @@ if(loginForm){
   btnLoginSave?.addEventListener("click", handleModalLoginSubmit);
 }
 
-btnLogout.addEventListener("click", async () => {
-  clearDraft();
-  clearAuth();
-  closeLogin();
-  if(USE_CLOUD){
-    recordsCache = [];
-    renderRecordList();
-  }
-});
+btnLogout.addEventListener("click", () => performLogout());
 
 if(gateLoginForm){
   gateLoginForm.addEventListener("submit", async (e) => {
