@@ -11,45 +11,74 @@
     <div class="topbar__left">
       <img src="./assets/afi-logo.png" alt="Arla Foods Ingredients" class="topbar__logo" />
       <div class="topbar__brand">
+        <span class="topbar__eyebrow">Arla Foods Ingredients</span>
         <strong>Komponent-blanket</strong>
-        <span class="muted">— UX som skabelonen</span>
+        <span class="topbar__site">Danmark Protein</span>
       </div>
     </div>
     <div class="topbar__actions">
-      <button id="btnLogin" class="btn">Login</button>
-      <span id="userBadge" class="userBadge">—</span>
-      <button id="btnAdminCreateUser" class="btn" style="display:none">Admin: Opret bruger</button>
-      <button id="btnNew" class="btn">Ny</button>
-      <button id="btnSave" class="btn btn--primary">Gem lokalt</button>
-      <button id="btnLoad" class="btn">Hent lokalt</button>
-      <button id="btnOCR" class="btn">OCR scan</button>
-      <button id="btnPrint" class="btn">Print / PDF</button>
-      <button id="btnImport" class="btn">Importér JSON</button>
-      <button id="btnExport" class="btn">Eksportér JSON</button>
-      <button id="btnExportExcel" class="btn">Eksportér Excel</button>
+      <div class="topbar__group topbar__group--session">
+        <button id="btnLogin" class="btn">Login</button>
+        <span id="userBadge" class="userBadge">—</span>
+        <button id="btnAdminCreateUser" class="btn" style="display:none">Admin: Opret bruger</button>
+      </div>
+      <div class="topbar__group">
+        <button id="btnNew" class="btn">Ny</button>
+        <button id="btnSave" class="btn btn--primary">Gem lokalt</button>
+        <button id="btnLoad" class="btn">Hent lokalt</button>
+      </div>
+      <div class="topbar__group">
+        <button id="btnOCR" class="btn">OCR scan</button>
+        <button id="btnPrint" class="btn">Print / PDF</button>
+        <button id="btnImport" class="btn">Importér JSON</button>
+        <button id="btnExport" class="btn">Eksportér JSON</button>
+        <button id="btnExportExcel" class="btn">Eksportér Excel</button>
+      </div>
     </div>
   </header>
 
   <main id="authGate" class="authGate" aria-label="Login">
-    <section class="authCard">
-      <img src="./assets/afi-logo.png" alt="Arla Foods Ingredients" class="authCard__logo" />
-      <div>
-        <h1 class="authCard__title">Komponent-blanket</h1>
-        <p class="authCard__text">Log ind for at se og søge i komponentnumre.</p>
+    <section class="authShell">
+      <div class="authBrandPanel">
+        <div class="authBrandPanel__top">
+          <span class="authBrandPanel__logoWrap">
+            <img src="./assets/afi-logo.png" alt="Arla Foods Ingredients" class="authBrandPanel__logo" />
+          </span>
+          <span class="authBrandPanel__plant">Danmark Protein</span>
+        </div>
+
+        <div class="authBrandPanel__body">
+          <p class="authKicker">Arla Foods Ingredients</p>
+          <h1>Komponent-blanket</h1>
+          <p>Intern adgang til komponentnumre, poster og revisionsdata.</p>
+        </div>
+
+        <div class="authBrandPanel__footer">
+          <span>Cloud-adgang</span>
+          <span>D1-database</span>
+        </div>
       </div>
 
-      <div class="authCard__fields">
-        <label class="modal__label" for="gateLoginInitials">Initialer</label>
-        <input id="gateLoginInitials" class="input" placeholder="AB" autocomplete="username" />
+      <section class="authCard">
+        <div>
+          <div class="authCard__badge">Sikker adgang</div>
+          <h2 class="authCard__title">Log ind</h2>
+          <p class="authCard__text">Brug dine initialer og PIN for at fortsætte.</p>
+        </div>
 
-        <label class="modal__label" for="gateLoginPin">PIN</label>
-        <input id="gateLoginPin" class="input" type="password" placeholder="••••" autocomplete="current-password" />
-      </div>
+        <div class="authCard__fields">
+          <label class="modal__label" for="gateLoginInitials">Initialer</label>
+          <input id="gateLoginInitials" class="input" placeholder="AB" autocomplete="username" />
 
-      <div id="gateLoginError" class="authError" role="alert" aria-live="polite"></div>
+          <label class="modal__label" for="gateLoginPin">PIN</label>
+          <input id="gateLoginPin" class="input" type="password" placeholder="••••" autocomplete="current-password" />
+        </div>
 
-      <button class="btn btn--primary authCard__submit" id="btnGateLogin" type="button">Log ind</button>
-      <div class="authCard__help muted">Ikke oprettet? Kontakt en administrator.</div>
+        <div id="gateLoginError" class="authError" role="alert" aria-live="polite"></div>
+
+        <button class="btn btn--primary authCard__submit" id="btnGateLogin" type="button">Åbn komponent-blanket</button>
+        <div class="authCard__help muted">Ikke oprettet? Kontakt en administrator.</div>
+      </section>
     </section>
   </main>
 
