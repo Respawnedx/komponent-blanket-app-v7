@@ -120,6 +120,8 @@ The app uses three access levels:
 - `allocator` / PLAN: can do everything VIEW can do, plus add or remove orange `Projekt` reservations and save those project changes. It can create a new record only when the selected numbers are orange project reservations. It cannot change blue/red statuses, import, scan, delete, or edit master data on existing records.
 - `admin` / ADMIN: full access. Admin can create records, maintain master data, change all statuses, import Access/Excel/CSV or scan data, export JSON backup, delete records, and manage users.
 
+Status changes are autosaved. When a user changes a number between `I brug`, `Projekt`, `Frigivet`, or blank, the app saves the record after a short debounce and writes a revision entry automatically. The manual **Gem ændringer** button is still used for deliberate master-data updates and descriptions.
+
 See [backend/README.md](backend/README.md) for Worker deployment, D1 setup, secrets, migrations, and admin bootstrap instructions.
 
 ## Backend Overview
@@ -134,6 +136,8 @@ The Worker in `backend/src/index.js` provides:
 - `GET /health` for a simple health check.
 
 Passwords are stored as PBKDF2 hashes with a random salt. Login returns a signed bearer token. Each authenticated request verifies the token and checks that the user still exists and is not disabled.
+
+The Worker also throttles failed logins per account and per IP hash. Repeated bad credentials return `429 Too Many Requests` with a `Retry-After` header. For production, add Cloudflare WAF/rate limiting in front of `/auth/login` as the first layer against credential stuffing and request floods.
 
 Read-only record routes require any valid user. Record-changing routes require `allocator` or `admin`, but the backend also enforces that `allocator` users can only change orange project reservations. New allocator-created records must contain at least one orange project reservation.
 

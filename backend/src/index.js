@@ -49,6 +49,11 @@ function passwordValidationError(secret) {
   return "";
 }
 
+const LOGIN_THROTTLE = {
+  account: { maxFailures: 8, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 },
+  ip: { maxFailures: 30, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 },
+};
+
 function normalizeTagStatus(mark) {
   const raw = String(mark || "blue").trim().toLowerCase();
   if (["reserved", "project", "temporary"].includes(raw)) return "reserved";
@@ -203,6 +208,87 @@ async function pbkdf2Hash(secret, saltHex, iterations = 100_000) {
   return toHex(bits);
 }
 
+function isoToMs(iso) {
+  const ms = Date.parse(String(iso || ""));
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function clientIpFromRequest(request) {
+  const cfIp = request.headers.get("CF-Connecting-IP");
+  if (cfIp) return cfIp.trim();
+  const forwarded = request.headers.get("X-Forwarded-For") || "";
+  return forwarded.split(",")[0].trim() || "unknown";
+}
+
+async function throttleHash(env, value) {
+  return hmacSha256Hex(env.TOKEN_SECRET || "login-throttle", String(value || "unknown"));
+}
+
+async function loginThrottleKeys(env, request, login) {
+  const normalizedLogin = normalizeLogin(login || "blank");
+  const ip = clientIpFromRequest(request);
+  const [accountHash, ipHash] = await Promise.all([
+    throttleHash(env, normalizedLogin),
+    throttleHash(env, ip),
+  ]);
+  return [
+    { key: `acct:${accountHash}`, scope: "account", config: LOGIN_THROTTLE.account },
+    { key: `ip:${ipHash}`, scope: "ip", config: LOGIN_THROTTLE.ip },
+  ];
+}
+
+async function getLoginThrottleBlock(env, keys) {
+  const now = Date.now();
+  let longestWaitSeconds = 0;
+
+  for (const item of keys) {
+    const row = await env.DB.prepare(
+      "SELECT locked_until FROM login_throttle WHERE key=?"
+    ).bind(item.key).first();
+
+    const lockedUntil = isoToMs(row?.locked_until);
+    if (lockedUntil > now) {
+      longestWaitSeconds = Math.max(longestWaitSeconds, Math.ceil((lockedUntil - now) / 1000));
+    }
+  }
+
+  return longestWaitSeconds > 0 ? { retryAfterSeconds: longestWaitSeconds } : null;
+}
+
+async function recordLoginFailure(env, keys) {
+  const now = Date.now();
+  const nowText = new Date(now).toISOString();
+
+  for (const item of keys) {
+    const row = await env.DB.prepare(
+      "SELECT failures, first_failed_at, locked_until FROM login_throttle WHERE key=?"
+    ).bind(item.key).first();
+
+    const firstMs = isoToMs(row?.first_failed_at);
+    const insideWindow = firstMs && (now - firstMs) <= item.config.windowMs;
+    const failures = insideWindow ? Number(row?.failures || 0) + 1 : 1;
+    const firstFailedAt = insideWindow ? String(row?.first_failed_at || nowText) : nowText;
+
+    const lockMultiplier = Math.max(1, Math.ceil(failures / item.config.maxFailures));
+    const lockedUntil = failures >= item.config.maxFailures
+      ? new Date(now + Math.min(item.config.lockMs * lockMultiplier, 60 * 60 * 1000)).toISOString()
+      : null;
+
+    await env.DB.prepare(
+      "INSERT INTO login_throttle(key, scope, failures, first_failed_at, last_failed_at, locked_until, updated_at) VALUES(?,?,?,?,?,?,?) " +
+      "ON CONFLICT(key) DO UPDATE SET failures=excluded.failures, first_failed_at=excluded.first_failed_at, last_failed_at=excluded.last_failed_at, locked_until=excluded.locked_until, updated_at=excluded.updated_at"
+    )
+      .bind(item.key, item.scope, failures, firstFailedAt, nowText, lockedUntil, nowText)
+      .run();
+  }
+}
+
+async function clearLoginThrottle(env, keys) {
+  for (const item of keys) {
+    await env.DB.prepare("DELETE FROM login_throttle WHERE key=?").bind(item.key).run();
+  }
+}
+
 function parseAllowedOrigins(env) {
   const raw = (env.ALLOWED_ORIGINS || "").trim();
   if (!raw) return [];
@@ -235,10 +321,10 @@ function corsHeaders(origin, allowed) {
   return headers;
 }
 
-function jsonResponse(data, origin, allowed, status = 200) {
+function jsonResponse(data, origin, allowed, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: { "Content-Type": "application/json", ...corsHeaders(origin, allowed) },
+    headers: { "Content-Type": "application/json", ...corsHeaders(origin, allowed), ...extraHeaders },
   });
 }
 
@@ -347,6 +433,25 @@ export default {
         return jsonResponse({ error: "login+password required" }, origin, allowed, 400);
       }
 
+      const throttleKeys = await loginThrottleKeys(env, request, login);
+      const throttleBlock = await getLoginThrottleBlock(env, throttleKeys);
+      if (throttleBlock) {
+        await writeAudit(env, {
+          initials: "AUTH",
+          action: "LOGIN_THROTTLED",
+          field: "login",
+          value: login.includes("@") ? "email" : login,
+          meta: { retryAfterSeconds: throttleBlock.retryAfterSeconds },
+        });
+        return jsonResponse(
+          { error: "Too many login attempts. Try again later.", retryAfterSeconds: throttleBlock.retryAfterSeconds },
+          origin,
+          allowed,
+          429,
+          { "Retry-After": String(throttleBlock.retryAfterSeconds) }
+        );
+      }
+
       const row = login.includes("@")
         ? await env.DB.prepare(
           "SELECT initials, email, role, pin_salt, pin_hash, disabled FROM users WHERE lower(email)=lower(?)"
@@ -356,13 +461,31 @@ export default {
         ).bind(login).first();
 
       if (!row || row.disabled) {
-        return jsonResponse({ error: "Unknown user" }, origin, allowed, 401);
+        await recordLoginFailure(env, throttleKeys);
+        await writeAudit(env, {
+          initials: "AUTH",
+          action: "LOGIN_FAILED",
+          field: "login",
+          value: login.includes("@") ? "email" : login,
+          meta: { reason: "bad_credentials" },
+        });
+        return jsonResponse({ error: "Bad credentials" }, origin, allowed, 401);
       }
 
       const calc = await pbkdf2Hash(password, row.pin_salt);
       if (calc !== row.pin_hash) {
+        await recordLoginFailure(env, throttleKeys);
+        await writeAudit(env, {
+          initials: row.initials || "AUTH",
+          action: "LOGIN_FAILED",
+          field: "login",
+          value: row.initials || (login.includes("@") ? "email" : login),
+          meta: { reason: "bad_credentials" },
+        });
         return jsonResponse({ error: "Bad credentials" }, origin, allowed, 401);
       }
+
+      await clearLoginThrottle(env, throttleKeys);
 
       const ttl = Number(env.TOKEN_TTL_SECONDS || "604800");
       const now = Math.floor(Date.now() / 1000);

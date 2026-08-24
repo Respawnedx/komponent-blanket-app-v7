@@ -49,6 +49,9 @@ let codeSource = {};
 let codeMeta = {};
 // buffer of unsaved fine-grained changes (checkbox clicks etc.)
 let changeBuffer = [];
+let autoSaveTimer = null;
+let autoSaveInFlight = false;
+let autoSaveQueued = false;
 
 // ---------- Build checkbox grids ----------
 function parseRange(rangeStr){
@@ -980,6 +983,7 @@ function buildGrid(gridEl){
 
       updateSelectedCodes();
       saveDraft("status-change");
+      scheduleAutoSave("status-change");
 
       const mainRaw = (fields.main.value || "").trim();
       logAudit({
@@ -1053,6 +1057,7 @@ function buildGrid(gridEl){
 
       updateSelectedCodes();
       saveDraft("status-change");
+      scheduleAutoSave("status-change");
 
       const mainRaw = (fields.main.value || "").trim();
       logAudit({
@@ -1414,6 +1419,7 @@ function applyCheckChange(codeKey, checked, markOverride=null){
 
   updateSelectedCodes();
   saveDraft("status-change");
+  scheduleAutoSave("status-change");
 
   const mainRaw = (fields.main.value || "").trim();
   logAudit({
@@ -3069,20 +3075,28 @@ function startNewPost(){
 el("btnNew").addEventListener("click", startNewPost);
 btnNewSide?.addEventListener("click", startNewPost);
 
-el("btnSave").addEventListener("click", async () => {
+async function saveCurrentRecord(options = {}){
+  const mode = options.mode || "manual";
+  const isAuto = mode === "auto";
   const user = requireAllocator("Du skal have planner eller admin adgang for at kunne gemme projektændringer.");
-  if(!user) return;
+  if(!user) return false;
 
   const v = validateSingleMainNumber(fields.main.value);
-  if(!v.ok){ alert(v.message); return; }
+  if(!v.ok){
+    if(isAuto) updateSyncBadge("Autosave venter på hovednr.");
+    else alert(v.message);
+    return false;
+  }
 
   // Cloud: avoid duplicates on the same hovedkomponentnr.
   if(USE_CLOUD){
     try{
       await fetchRecordsCache();
     }catch(err){
-      alert("Kunne ikke hente cloud-poster til dublet-tjek. Prøv igen.\n\n" + (err?.message ?? err));
-      return;
+      const msg = "Kunne ikke hente cloud-poster til dublet-tjek. Prøv igen.\n\n" + (err?.message ?? err);
+      if(isAuto) updateSyncBadge("Autosave fejlede: data kunne ikke hentes");
+      else alert(msg);
+      return false;
     }
 
     const mainKey = stripLeadingZeros(parseMainNumber(fields.main.value));
@@ -3105,30 +3119,26 @@ el("btnSave").addEventListener("click", async () => {
             `Der findes allerede en cloud-post med hovednummer ${conflict.hovedkomponentnr}.\n\n` +
             `Du kan ikke gemme samme hovednummer to gange.\n\n` +
             `Vil du åbne den eksisterende post?`;
-          if(confirm(msg)){
+          if(isAuto){
+            updateSyncBadge("Autosave stoppet: dublet hovednr.");
+          }else if(confirm(msg)){
             setFormData(conflict);
             renderRecordList();
           }
-          return;
+          return false;
         }
 
         // Editing an existing post with same hovednummer while duplicates already exist.
         // Allow save, but warn the user.
-        const ok = confirm(
-          `OBS: Der findes allerede en anden cloud-post med samme hovednummer (${conflict.hovedkomponentnr}).\n` +
-          `Det kan give forvirring.\n\nVil du gemme denne post alligevel?`
-        );
-        if(!ok) return;
+        if(!isAuto){
+          const ok = confirm(
+            `OBS: Der findes allerede en anden cloud-post med samme hovednummer (${conflict.hovedkomponentnr}).\n` +
+            `Det kan give forvirring.\n\nVil du gemme denne post alligevel?`
+          );
+          if(!ok) return false;
+        }
       }
     }
-  }
-
-  const desc = await requestRevisionDescription();
-  if(desc === null) return;
-  const revDesc = String(desc || "").trim();
-  if(!revDesc){
-    alert("Skriv en kort beskrivelse (fx projektnr.).");
-    return;
   }
 
   const prevRec = activeId ? loadRecords().find(r => r.id === activeId) : null;
@@ -3136,10 +3146,24 @@ el("btnSave").addEventListener("click", async () => {
   const rec = getFormData();
   const plannerError = plannerSaveError(prevRec, rec);
   if(plannerError){
-    alert(plannerError);
-    return;
+    if(isAuto) updateSyncBadge("Autosave stoppet: rettighed mangler");
+    else alert(plannerError);
+    return false;
   }
   const changes = computeTagChanges(prevRec, rec);
+
+  let revDesc = "";
+  if(isAuto){
+    revDesc = options.description || firstRevisionLine(changes) || "Auto: statusændring";
+  }else{
+    const desc = await requestRevisionDescription();
+    if(desc === null) return false;
+    revDesc = String(desc || "").trim();
+    if(!revDesc){
+      alert("Skriv en kort beskrivelse (fx projektnr.).");
+      return false;
+    }
+  }
 
   if(!Array.isArray(rec.revisions)) rec.revisions = [];
   rec.revisions.push({ at: rec.updatedAt, by: user.initials, desc: revDesc, changes });
@@ -3161,10 +3185,60 @@ el("btnSave").addEventListener("click", async () => {
     });
 
     renderRevisions(rec);
-    alert(USE_CLOUD ? "Gemt (cloud)." : "Gemt lokalt.");
+    if(isAuto){
+      updateSyncBadge(USE_CLOUD ? "Autosave gemt" : "Autosave gemt lokalt");
+    }else{
+      alert(USE_CLOUD ? "Gemt (cloud)." : "Gemt lokalt.");
+    }
+    return true;
   }catch(err){
-    alert("Kunne ikke gemme: " + (err?.message ?? err));
+    if(isAuto) updateSyncBadge("Autosave fejlede");
+    else alert("Kunne ikke gemme: " + (err?.message ?? err));
+    return false;
   }
+}
+
+function firstRevisionLine(changes){
+  return String(changes || "").split(/\n+/).map(s => s.trim()).filter(Boolean)[0] || "";
+}
+
+function scheduleAutoSave(reason = "status-change"){
+  if(!changeBuffer.length) return;
+  const user = getCurrentUser();
+  if(!user || !canSaveRecords(user)) return;
+
+  saveDraft(reason);
+  updateSyncBadge("Autosave venter...");
+  autoSaveQueued = true;
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(runQueuedAutoSave, 1200);
+}
+
+async function runQueuedAutoSave(){
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = null;
+
+  if(autoSaveInFlight){
+    autoSaveQueued = true;
+    return;
+  }
+  if(!autoSaveQueued || !changeBuffer.length) return;
+
+  autoSaveQueued = false;
+  autoSaveInFlight = true;
+  updateSyncBadge("Autosave gemmer...");
+  try{
+    await saveCurrentRecord({ mode: "auto" });
+  }finally{
+    autoSaveInFlight = false;
+    if(autoSaveQueued && changeBuffer.length){
+      scheduleAutoSave("status-change");
+    }
+  }
+}
+
+el("btnSave").addEventListener("click", async () => {
+  await saveCurrentRecord({ mode: "manual" });
 });
 
 el("btnLoad").addEventListener("click", async () => {

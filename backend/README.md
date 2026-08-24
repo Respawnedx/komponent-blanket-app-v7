@@ -42,6 +42,7 @@ This creates:
 - `users` for login, email lookup, and roles.
 - `records` for saved component forms.
 - `audit` for user actions and record changes.
+- `login_throttle` for failed-login throttling.
 
 ## Configure Secrets and Variables
 
@@ -118,6 +119,21 @@ Login accepts:
 
 It also accepts `"initials": "AB"` for the same endpoint and still accepts the legacy `"pin"` property for prototype/demo users. The response returns a bearer token plus the user initials, email, and role.
 
+Failed logins are throttled in D1:
+
+- Per account/login: 8 failed attempts in 15 minutes triggers a temporary lockout.
+- Per IP hash: 30 failed attempts in 15 minutes triggers a temporary lockout.
+- Lockouts return `429 Too Many Requests` with `Retry-After`.
+- Successful login clears the counters for that account/IP pair.
+
+This is application-level brute-force protection. For production, also add a Cloudflare WAF rate limiting rule for `POST /auth/login`, for example with the expression:
+
+```text
+(http.request.uri.path eq "/auth/login" and http.request.method eq "POST")
+```
+
+Cloudflare WAF/Rate Limiting should be the outer layer for request floods and credential stuffing. The Worker throttling is the inner layer that still protects the API if traffic reaches the Worker.
+
 ### Admin Users
 
 - `GET /admin/users`
@@ -166,5 +182,6 @@ Writing audit rows through `POST /audit` requires `allocator` or `admin`.
 - Passwords are hashed with PBKDF2 and a random salt.
 - Tokens are signed with `TOKEN_SECRET`.
 - Every protected route verifies the token and checks that the user still exists and is not disabled.
+- Failed login throttling uses hashed account/IP keys so raw IP addresses are not stored in the throttle table.
 - CORS is controlled by `ALLOWED_ORIGINS`; add local development origins there when testing.
 - The current password reset UI is a prototype mail link to an administrator. A production reset flow should use one-time tokens and an approved email provider.
