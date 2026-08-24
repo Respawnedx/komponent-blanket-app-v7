@@ -137,7 +137,7 @@ The Worker in `backend/src/index.js` provides:
 
 Passwords are stored as PBKDF2 hashes with a random salt. Login returns a signed bearer token. Each authenticated request verifies the token and checks that the user still exists and is not disabled.
 
-The Worker also throttles failed logins per account and per IP hash. Repeated bad credentials return `429 Too Many Requests` with a `Retry-After` header. For production, add Cloudflare WAF/rate limiting in front of `/auth/login` as the first layer against credential stuffing and request floods.
+The Worker also throttles failed logins per login/IP combination and per IP hash. Repeated bad credentials return `429 Too Many Requests` with a `Retry-After` header. For production, add Cloudflare WAF/rate limiting in front of `/auth/login` as the first layer against credential stuffing and request floods.
 
 Read-only record routes require any valid user. Record-changing routes require `allocator` or `admin`, but the backend also enforces that `allocator` users can only change orange project reservations. New allocator-created records must contain at least one orange project reservation.
 

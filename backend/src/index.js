@@ -50,7 +50,7 @@ function passwordValidationError(secret) {
 }
 
 const LOGIN_THROTTLE = {
-  account: { maxFailures: 8, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 },
+  pair: { maxFailures: 8, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 },
   ip: { maxFailures: 30, windowMs: 15 * 60 * 1000, lockMs: 15 * 60 * 1000 },
 };
 
@@ -227,12 +227,12 @@ async function throttleHash(env, value) {
 async function loginThrottleKeys(env, request, login) {
   const normalizedLogin = normalizeLogin(login || "blank");
   const ip = clientIpFromRequest(request);
-  const [accountHash, ipHash] = await Promise.all([
-    throttleHash(env, normalizedLogin),
+  const [pairHash, ipHash] = await Promise.all([
+    throttleHash(env, `${normalizedLogin}|${ip}`),
     throttleHash(env, ip),
   ]);
   return [
-    { key: `acct:${accountHash}`, scope: "account", config: LOGIN_THROTTLE.account },
+    { key: `pair:${pairHash}`, scope: "pair", config: LOGIN_THROTTLE.pair },
     { key: `ip:${ipHash}`, scope: "ip", config: LOGIN_THROTTLE.ip },
   ];
 }
