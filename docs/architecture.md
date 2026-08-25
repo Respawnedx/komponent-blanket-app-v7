@@ -266,6 +266,9 @@ Autosave:
 3. `scheduleAutoSave()` debounces the save.
 4. `saveCurrentRecord({ mode: "auto" })` runs without asking for manual revision text.
 5. The revision description is generated from the first tag-change line.
+6. If there are no meaningful tag changes, autosave stores the record but skips creating a visible revision card.
+
+When the user later presses **Gem ændringer** and only provides a project description, `annotateLatestAutoRevision()` updates the latest auto-generated revision description. This avoids splitting one project action into two cards, where the newest card would otherwise say `Ingen tag-ændringer`.
 
 Master fields do not autosave directly. They are saved to a local draft and require manual **Gem ændringer**.
 
@@ -314,6 +317,8 @@ Revision entries are stored inside each record:
 - PID binding changes when multiple PIDs exist
 
 The revision renderer turns tag references into visual chips for readability.
+
+Auto-generated revisions include `source: "auto"`. Manual saves include `source: "manual"`. Older auto-generated records are still detected by comparing the revision description to the first line of its tag changes.
 
 ## Import and Export
 

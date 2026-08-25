@@ -126,6 +126,8 @@ Availability only treats `I brug` and `Projekt` as blocking. `Frigivet` is histo
 
 Status changes are autosaved after a short debounce and get automatic revision entries. This means changes between blank, `I brug`, `Projekt`, and `Frigivet` are logged even if the user forgets to press **Gem ændringer**.
 
+If the user presses **Gem ændringer** after an autosaved status change and only adds the project description, the app annotates the latest autosave revision instead of creating a separate `Ingen tag-ændringer` revision. This keeps the project name together with the reserved/released numbers it belongs to.
+
 Master-data fields such as description, plant, PID, and signature are kept as a local draft until the user presses **Gem ændringer**. If a draft or autosave is pending, the browser shows its standard close/refresh warning.
 
 The Worker uses optimistic concurrency. When the frontend saves a record, it sends the `updatedAt` timestamp it originally loaded. If the D1 row has changed since then, the Worker returns `409 Conflict` instead of silently overwriting another user's work.
